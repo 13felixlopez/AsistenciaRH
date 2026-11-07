@@ -1,0 +1,11 @@
+/api/*  /.netlify/functions/api  200!
+/login  /login.html  200
+/dashboard  /dashboard.html  200
+/asistencias/registro  /asistencias-registro.html  200
+/asistencias/historial  /asistencias-historial.html  200
+/reportes  /reportes.html  200
+/areas  /areas.html  200
+/puestos  /puestos.html  200
+/usuarios  /usuarios.html  200
+/perfil  /perfil.html  200
+/  /login.html  200

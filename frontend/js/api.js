@@ -101,10 +101,12 @@ async function apiFetch(endpoint, options = {}) {
         const rawText = await response.text();
         let data = {};
         if (rawText && rawText.trim().length > 0) {
+            if (rawText.trim().startsWith('<')) {
+                throw new Error(`El servidor devolvió una página web (HTML) en lugar de una respuesta API (HTTP ${response.status}). Verifica el despliegue de las Netlify Functions.`);
+            }
             try {
                 data = JSON.parse(rawText);
             } catch (jsonErr) {
-                // Si la respuesta no es JSON (ej. error 502/404 de Netlify Functions)
                 throw new Error(`Respuesta inválida del servidor (${response.status}): ${rawText.substring(0, 120)}`);
             }
         }

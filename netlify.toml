@@ -6,7 +6,7 @@
 # Redirección de llamadas a la API hacia la función serverless de Netlify
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
+  to = "/.netlify/functions/api"
   status = 200
   force = true
 

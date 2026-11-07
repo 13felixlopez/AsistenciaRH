@@ -4,6 +4,11 @@
 
 # Reglas de Redirección y Rutas Limpias (Clean URLs)
 [[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api"
+  status = 200
+  force = true
+[[redirects]]
   from = "/"
   to = "/index.html"
   status = 200
