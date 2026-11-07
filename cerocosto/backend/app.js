@@ -42,9 +42,44 @@ apiRouter.get('/health', (req, res) => {
     });
 });
 
-// Endpoint de inicialización / migración de base de datos en Turso
+// Endpoint blindado de inicialización / migración de base de datos en Turso
 apiRouter.get('/init-db', async (req, res) => {
     try {
+        const { client } = require('./config/db');
+        let tablesExist = false;
+        try {
+            const check = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Usuarios'");
+            tablesExist = Boolean(check.rows && check.rows.length > 0);
+        } catch (e) {
+            tablesExist = false;
+        }
+
+        // Si las tablas ya existen, se requiere autenticación estricta de ADMIN
+        if (tablesExist) {
+            const authHeader = req.headers.authorization;
+            let authorized = false;
+
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.split(' ')[1];
+                try {
+                    const jwt = require('jsonwebtoken');
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                    if (decoded && decoded.rol_codigo === 'ADMIN') {
+                        authorized = true;
+                    }
+                } catch (tokErr) {
+                    authorized = false;
+                }
+            }
+
+            if (!authorized) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acceso denegado: La base de datos ya se encuentra en producción. Solo un Administrador autenticado puede ejecutar migraciones.'
+                });
+            }
+        }
+
         const force = req.query.force === 'true';
         const result = await initDatabase(force);
         res.json({

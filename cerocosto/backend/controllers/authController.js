@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { query, initDatabase } = require('../config/db');
+const { recordFailedLogin, resetLoginAttempts } = require('../middlewares/rateLimiter');
 
 // Iniciar sesión y retornar JWT
 async function login(req, res) {
@@ -41,6 +42,7 @@ async function login(req, res) {
         }
 
         if (result.recordset.length === 0) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 success: false,
                 message: 'Credenciales incorrectas o usuario no encontrado.'
@@ -50,6 +52,7 @@ async function login(req, res) {
         const user = result.recordset[0];
 
         if (!user.activo) {
+            recordFailedLogin(req);
             return res.status(403).json({
                 success: false,
                 message: 'Tu cuenta se encuentra inactiva. Contacta al Administrador.'
@@ -58,11 +61,15 @@ async function login(req, res) {
 
         const match = await bcrypt.compare(password, user.password_hash);
         if (!match) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 success: false,
                 message: 'Credenciales incorrectas.'
             });
         }
+
+        // Login exitoso: restablecer contador de intentos fallidos
+        resetLoginAttempts(req);
 
         // Actualizar último acceso
         await query(

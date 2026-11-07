@@ -1,8 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { query } = require('../config/db');
 
-// Middleware para verificar autenticación JWT
-function isAuthenticated(req, res, next) {
+// Middleware para verificar autenticación JWT con validación de estado activo en tiempo real
+async function isAuthenticated(req, res, next) {
     let token = null;
 
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
@@ -20,6 +20,29 @@ function isAuthenticated(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Verificación en tiempo real de usuario activo en base de datos (revocación inmediata)
+        try {
+            const userCheck = await query(
+                'SELECT id_usuario, activo, id_rol FROM Usuarios WHERE id_usuario = ?',
+                [decoded.id_usuario]
+            );
+
+            if (userCheck.recordset.length === 0 || !userCheck.recordset[0].activo) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Tu cuenta se encuentra inactiva o tu sesión ha sido revocada por el Administrador.',
+                    revoked: true
+                });
+            }
+
+            if (userCheck.recordset[0].id_rol !== decoded.id_rol) {
+                decoded.id_rol = userCheck.recordset[0].id_rol;
+            }
+        } catch (dbErr) {
+            console.warn('Advertencia en verificación de estado activo:', dbErr.message);
+        }
+
         req.user = decoded;
         req.session = req.session || {};
         req.session.user = decoded;

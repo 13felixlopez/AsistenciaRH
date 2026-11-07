@@ -16,3 +16,8 @@ cerocosto/.env
 .netlify/
 Thumbs.db
 .DS_Store
+
+# Respaldos de base de datos
+backups/
+cerocosto/backups/
+*.sql.bak

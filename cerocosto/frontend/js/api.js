@@ -92,6 +92,24 @@ async function apiFetch(endpoint, options = {}) {
             throw new Error('Sesión expirada o no autorizada.');
         }
 
+        if (response.status === 403) {
+            // Comprobar si la cuenta fue revocada/desactivada en caliente
+            const clone = response.clone();
+            try {
+                const errData = await clone.json();
+                if (errData && errData.revoked) {
+                    Auth.clearSession();
+                    if (!window.location.pathname.endsWith('login.html')) {
+                        alert(errData.message || 'Tu cuenta ha sido desactivada por el Administrador.');
+                        window.location.href = '/login.html';
+                    }
+                    throw new Error(errData.message);
+                }
+            } catch (e) {
+                // Continuar flujo normal de error
+            }
+        }
+
         // Si es descarga de archivo (ej. Excel)
         const contentType = response.headers.get('content-type');
         if (contentType && (contentType.includes('spreadsheet') || contentType.includes('octet-stream'))) {

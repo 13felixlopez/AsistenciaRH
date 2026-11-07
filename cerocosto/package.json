@@ -5,7 +5,8 @@
   "main": "netlify/functions/api.js",
   "scripts": {
     "start": "node backend/app.js",
-    "init-db": "node database/init_turso.js"
+    "init-db": "node database/init_turso.js",
+    "backup": "node database/backup_turso.js"
   },
   "keywords": [
     "asistencia",

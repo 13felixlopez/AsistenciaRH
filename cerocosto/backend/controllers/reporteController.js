@@ -613,7 +613,90 @@ async function exportExcel(req, res) {
     }
 }
 
+// Exportar respaldo forense completo de la base de datos en formato SQL
+async function exportSqlBackup(req, res) {
+    const user = req.user || (req.session && req.session.user);
+    if (!user || user.rol_codigo !== 'ADMIN') {
+        return res.status(403).json({
+            success: false,
+            message: 'Acceso denegado: Solo los administradores pueden generar respaldos de la base de datos.'
+        });
+    }
+
+    try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').split('Z')[0];
+        const tables = [
+            'Roles',
+            'Areas',
+            'Ubicaciones',
+            'Puestos',
+            'Usuarios',
+            'Usuario_Areas',
+            'Usuario_Ubicaciones',
+            'Asistencias'
+        ];
+
+        let sqlDump = `-- =====================================================================\n`;
+        sqlDump += `-- RESPALDO OFICIAL DE BASE DE DATOS: AsistenciaRH\n`;
+        sqlDump += `-- Fecha y Hora: ${new Date().toISOString()}\n`;
+        sqlDump += `-- Generado por: ${user.usuario || user.nombre} (ID: ${user.id_usuario})\n`;
+        sqlDump += `-- Motor: Turso libSQL (SQLite)\n`;
+        sqlDump += `-- =====================================================================\n\n`;
+        sqlDump += `PRAGMA foreign_keys = OFF;\n`;
+        sqlDump += `BEGIN TRANSACTION;\n\n`;
+
+        let totalRecords = 0;
+
+        for (const tableName of tables) {
+            try {
+                const tableData = await query(`SELECT * FROM ${tableName}`);
+                const rows = tableData.recordset;
+                totalRecords += rows.length;
+
+                sqlDump += `-- ---------------------------------------------------------------------\n`;
+                sqlDump += `-- Tabla: ${tableName} (${rows.length} registros)\n`;
+                sqlDump += `-- ---------------------------------------------------------------------\n`;
+                sqlDump += `DELETE FROM ${tableName};\n`;
+
+                if (rows.length > 0) {
+                    const columns = Object.keys(rows[0]);
+                    for (const row of rows) {
+                        const values = columns.map(col => {
+                            const val = row[col];
+                            if (val === null || val === undefined) return 'NULL';
+                            if (typeof val === 'number') return val;
+                            if (typeof val === 'boolean') return val ? 1 : 0;
+                            const escaped = String(val).replace(/'/g, "''");
+                            return `'${escaped}'`;
+                        });
+                        sqlDump += `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')});\n`;
+                    }
+                }
+                sqlDump += `\n`;
+            } catch (tabErr) {
+                sqlDump += `-- Error leyendo tabla ${tableName}: ${tabErr.message}\n\n`;
+            }
+        }
+
+        sqlDump += `COMMIT;\n`;
+        sqlDump += `PRAGMA foreign_keys = ON;\n\n`;
+        sqlDump += `-- Fin del Respaldo. Total de registros exportados: ${totalRecords}\n`;
+
+        res.setHeader('Content-Type', 'application/sql; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="asistenciarh_backup_${timestamp}.sql"`);
+        return res.send(sqlDump);
+
+    } catch (err) {
+        console.error('Error al generar respaldo SQL:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al generar respaldo de base de datos: ' + err.message
+        });
+    }
+}
+
 module.exports = {
     showReportes,
-    exportExcel
+    exportExcel,
+    exportSqlBackup
 };
