@@ -1,0 +1,16 @@
+[build]
+  publish = "frontend"
+  functions = "netlify/functions"
+
+# Redirige todas las peticiones a la API hacia la Netlify Function
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+# Redirige la raíz principal al inicio de sesión
+[[redirects]]
+  from = "/"
+  to = "/login.html"
+  status = 200

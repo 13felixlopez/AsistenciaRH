@@ -1,0 +1,69 @@
+# Configuración de despliegue para Netlify
+[build]
+  publish = "."
+
+# Reglas de Redirección y Rutas Limpias (Clean URLs)
+[[redirects]]
+  from = "/"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/login"
+  to = "/login.html"
+  status = 200
+
+[[redirects]]
+  from = "/dashboard"
+  to = "/dashboard.html"
+  status = 200
+
+[[redirects]]
+  from = "/asistencias/registro"
+  to = "/asistencias-registro.html"
+  status = 200
+
+[[redirects]]
+  from = "/asistencias/historial"
+  to = "/asistencias-historial.html"
+  status = 200
+
+[[redirects]]
+  from = "/reportes"
+  to = "/reportes.html"
+  status = 200
+
+[[redirects]]
+  from = "/areas"
+  to = "/areas.html"
+  status = 200
+
+[[redirects]]
+  from = "/puestos"
+  to = "/puestos.html"
+  status = 200
+
+[[redirects]]
+  from = "/usuarios"
+  to = "/usuarios.html"
+  status = 200
+
+[[redirects]]
+  from = "/perfil"
+  to = "/perfil.html"
+  status = 200
+
+# Cabeceras de Seguridad y Service Worker
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Service-Worker-Allowed = "/"
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

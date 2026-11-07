@@ -1,0 +1,106 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-1 text-dark">Gestión de Usuarios y Permisos</h2>
+        <p class="text-muted mb-0">Administra el acceso de registradores, supervisores y define qué áreas puede ver cada uno.</p>
+    </div>
+    <div>
+        <a href="/usuarios/nuevo" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm">
+            <i class="bi bi-person-plus-fill"></i>
+            <span>Nuevo Usuario</span>
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Usuario / Nombre</th>
+                        <th>Correo Electrónico</th>
+                        <th>Rol del Sistema</th>
+                        <th>Áreas Asignadas (Permisos)</th>
+                        <th class="text-center">Estado</th>
+                        <th class="pe-4 text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (usuarios && usuarios.length > 0) { %>
+                        <% usuarios.forEach(function(u) { %>
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="bg-primary-subtle text-primary fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-size: 0.9rem;">
+                                            <%= u.nombre.charAt(0).toUpperCase() %>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold text-dark"><%= u.nombre %> <span class="badge bg-light text-primary border ms-1">@<%= u.usuario %></span></div>
+                                            <small class="text-muted"><%= u.cargo || 'Sin cargo especificado' %></small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-secondary"><i class="bi bi-envelope me-1"></i> <%= u.email %></span>
+                                </td>
+                                <td>
+                                    <span class="badge <%= u.rol_codigo === 'ADMIN' ? 'bg-danger' : (u.rol_codigo === 'CONSULTOR' ? 'bg-info text-dark' : 'bg-primary') %>">
+                                        <%= u.rol_nombre %>
+                                    </span>
+                                </td>
+                                <td>
+                                    <% if (u.rol_codigo === 'ADMIN') { %>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            <i class="bi bi-check-all me-1"></i> Acceso Total (Todas las Áreas y Ubicaciones)
+                                        </span>
+                                    <% } else if (u.areas_asignadas) { %>
+                                        <div class="small fw-semibold text-dark"><%= u.areas_asignadas %></div>
+                                        <% if (u.ubicaciones_asignadas) { %>
+                                            <div class="small text-muted mt-1">
+                                                <i class="bi bi-geo-alt-fill text-warning me-1"></i>
+                                                <span class="text-secondary"><%= u.ubicaciones_asignadas %></span>
+                                            </div>
+                                        <% } else { %>
+                                            <small class="text-muted d-block mt-1">Áreas completas (sin filtro por ubicación)</small>
+                                        <% } %>
+                                    <% } else { %>
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                            <i class="bi bi-exclamation-circle me-1"></i> Sin áreas asignadas
+                                        </span>
+                                    <% } %>
+                                </td>
+                                <td class="text-center">
+                                    <% if (u.activo) { %>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>
+                                    <% } else { %>
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Inactivo</span>
+                                    <% } %>
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="/usuarios/editar/<%= u.id_usuario %>" class="btn btn-outline-primary" title="Editar datos y permisos de áreas">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </a>
+                                        <% if (locals.currentUser && locals.currentUser.id_usuario !== u.id_usuario) { %>
+                                            <form action="/usuarios/toggle/<%= u.id_usuario %>" method="POST" class="d-inline">
+                                                <button type="button" class="btn btn-outline-<%= u.activo ? 'warning' : 'success' %> btn-confirm-action" 
+                                                        data-confirm-message="¿Desea <%= u.activo ? 'desactivar' : 'activar' %> a este usuario?"
+                                                        title="<%= u.activo ? 'Desactivar acceso' : 'Activar acceso' %>">
+                                                    <i class="bi bi-<%= u.activo ? 'person-x' : 'person-check' %>"></i>
+                                                </button>
+                                            </form>
+                                        <% } %>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">No hay usuarios registrados.</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

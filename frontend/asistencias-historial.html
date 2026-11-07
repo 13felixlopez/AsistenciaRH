@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Asistencias | Registro de Asistencia</title>
+    <!-- Metadatos PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#860063">
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body class="bg-light">
+    <div class="app-wrapper d-flex">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebarMenu"></aside>
+
+        <!-- Main Content Area -->
+        <div class="main-wrapper flex-grow-1 d-flex flex-column min-vh-100 overflow-hidden">
+            <!-- Navbar -->
+            <nav id="appNavbar"></nav>
+
+            <!-- Main Body -->
+            <main class="flex-grow-1 p-3 p-md-4 overflow-auto">
+                <div class="container-fluid p-0">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                        <div>
+                            <h2 class="fw-bold mb-1 text-dark">Historial de Asistencias</h2>
+                            <p class="text-muted mb-0">Consulta y seguimiento de todos los registros de asistencia realizados por área y ubicación.</p>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="/asistencias-registro.html" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm">
+                                <i class="bi bi-pencil-square"></i>
+                                <span>Nuevo Registro</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Filtros de búsqueda -->
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-body p-3">
+                            <form id="formFiltroHistorial" class="row g-3 align-items-end">
+                                <div class="col-md-2">
+                                    <label for="fechaInicio" class="form-label fw-semibold text-secondary small">Desde:</label>
+                                    <input type="date" class="form-control" id="fechaInicio" name="fechaInicio">
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="fechaFin" class="form-label fw-semibold text-secondary small">Hasta:</label>
+                                    <input type="date" class="form-control" id="fechaFin" name="fechaFin">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="selectAreaHistorial" class="form-label fw-semibold text-secondary small">Filtrar por Área:</label>
+                                    <select id="selectAreaHistorial" class="form-select">
+                                        <option value="">-- Todas mis Áreas Autorizadas --</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="selectUbicacionHistorial" class="form-label fw-semibold text-secondary small">Filtrar por Ubicación:</label>
+                                    <select id="selectUbicacionHistorial" class="form-select" disabled>
+                                        <option value="">-- Todas las Ubicaciones --</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <button type="submit" class="btn btn-primary w-100 fw-semibold">
+                                        <i class="bi bi-filter me-1"></i> Filtrar
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Resumen Estadístico Rápido -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <div class="card shadow-sm border-0 bg-primary-subtle text-primary p-3">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="fw-semibold text-uppercase" style="font-size: 0.75rem;">Total de Asistencias Sumadas</span>
+                                        <h3 class="fw-bold my-1 text-primary" id="totalesPersonas">- personas</h3>
+                                    </div>
+                                    <i class="bi bi-people fs-1 opacity-50"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card shadow-sm border-0 bg-success-subtle text-success p-3">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="fw-semibold text-uppercase" style="font-size: 0.75rem;">Registros / Puestos Evaluados</span>
+                                        <h3 class="fw-bold my-1 text-success" id="totalesRegistros">- registros</h3>
+                                    </div>
+                                    <i class="bi bi-card-checklist fs-1 opacity-50"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de Registros -->
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-4">Fecha</th>
+                                            <th>Área / Ubicación</th>
+                                            <th>Puesto</th>
+                                            <th class="text-center">Cantidad Asistieron</th>
+                                            <th>Observaciones</th>
+                                            <th>Registrado Por</th>
+                                            <th class="pe-4 text-end">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbodyHistorial">
+                                        <tr>
+                                            <td colspan="7" class="text-center py-5 text-muted">
+                                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                                Cargando historial de asistencias...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Footer -->
+            <footer id="appFooter"></footer>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle & App Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            initAppLayout('historial');
+
+            const fechaInicioInput = document.getElementById('fechaInicio');
+            const fechaFinInput = document.getElementById('fechaFin');
+            const selectArea = document.getElementById('selectAreaHistorial');
+            const selectUbicacion = document.getElementById('selectUbicacionHistorial');
+            const formFiltro = document.getElementById('formFiltroHistorial');
+            const tbodyHistorial = document.getElementById('tbodyHistorial');
+            const totalesPersonas = document.getElementById('totalesPersonas');
+            const totalesRegistros = document.getElementById('totalesRegistros');
+
+            // Fechas iniciales por defecto (últimos 7 días)
+            const hoy = new Date();
+            const sieteDiasAtras = new Date();
+            sieteDiasAtras.setDate(hoy.getDate() - 7);
+
+            fechaInicioInput.value = sieteDiasAtras.toISOString().split('T')[0];
+            fechaFinInput.value = hoy.toISOString().split('T')[0];
+
+            async function cargarHistorial() {
+                tbodyHistorial.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                            Cargando historial...
+                        </td>
+                    </tr>
+                `;
+
+                const fInicio = fechaInicioInput.value;
+                const fFin = fechaFinInput.value;
+                const aId = selectArea.value;
+                const uId = selectUbicacion.value;
+
+                let endpoint = `/asistencias/historial?fechaInicio=${fInicio}&fechaFin=${fFin}`;
+                if (aId) endpoint += `&areaId=${aId}`;
+                if (uId) endpoint += `&ubicacionId=${uId}`;
+
+                try {
+                    const res = await api.get(endpoint);
+                    if (!res.success || !res.data) return;
+
+                    const data = res.data;
+
+                    // Poblar selector de áreas solo la primera vez o si está vacío
+                    if (selectArea.options.length <= 1 && data.areas) {
+                        if (data.areas.length === 1) {
+                            selectArea.innerHTML = data.areas.map(a => `
+                                <option value="${a.id_area}" selected>
+                                    ${a.nombre}
+                                </option>
+                            `).join('');
+                        } else {
+                            selectArea.innerHTML = '<option value="">-- Todas mis Áreas Autorizadas --</option>' + 
+                                data.areas.map(a => `
+                                    <option value="${a.id_area}" ${aId == a.id_area ? 'selected' : ''}>
+                                        ${a.nombre}
+                                    </option>
+                                `).join('');
+                        }
+                    }
+
+                    // Poblar selector de ubicaciones si hay disponibles
+                    if (data.ubicacionesFiltro && data.ubicacionesFiltro.length > 0) {
+                        selectUbicacion.disabled = false;
+                        selectUbicacion.innerHTML = '<option value="">-- Todas las Ubicaciones --</option>' + 
+                            data.ubicacionesFiltro.map(u => `
+                                <option value="${u.id_ubicacion}" ${uId == u.id_ubicacion ? 'selected' : ''}>
+                                    ${u.nombre}
+                                </option>
+                            `).join('');
+                    } else {
+                        selectUbicacion.disabled = true;
+                        selectUbicacion.innerHTML = '<option value="">-- Todas las Ubicaciones --</option>';
+                    }
+
+                    // Actualizar Totales
+                    totalesPersonas.textContent = `${data.totales ? data.totales.personas : 0} personas`;
+                    totalesRegistros.textContent = `${data.totales ? data.totales.registros : 0} registros`;
+
+                    // Renderizar Filas
+                    const asistencias = data.asistencias || [];
+                    if (asistencias.length > 0) {
+                        const hoyStr = new Date().toISOString().split('T')[0];
+
+                        tbodyHistorial.innerHTML = asistencias.map(item => {
+                            let turnoBadge = '';
+                            if (item.turno === 'TURNO 1' || item.turno === 'TURNO_1') {
+                                turnoBadge = `<span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-1" style="font-size: 0.72rem;"><i class="bi bi-sun-fill text-warning me-1"></i>Turno 1</span>`;
+                            } else if (item.turno === 'TURNO 2' || item.turno === 'TURNO_2') {
+                                turnoBadge = `<span class="badge bg-info-subtle text-dark border border-info-subtle ms-1" style="font-size: 0.72rem;"><i class="bi bi-moon-fill text-info me-1"></i>Turno 2</span>`;
+                            }
+
+                            const ubicacionBadge = item.ubicacion_nombre 
+                                ? `<span class="badge bg-warning-subtle text-dark border border-warning-subtle small mt-1"><i class="bi bi-geo-alt-fill text-warning me-1"></i>${item.ubicacion_nombre}</span>`
+                                : '';
+
+                            const esHoy = item.fecha === hoyStr;
+
+                            return `
+                                <tr>
+                                    <td class="ps-4 fw-bold text-dark">
+                                        <i class="bi bi-calendar-event me-1 text-primary"></i>
+                                        ${item.fecha}
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark">${item.area_nombre}</div>
+                                        ${ubicacionBadge}
+                                    </td>
+                                    <td class="fw-semibold text-secondary">
+                                        ${item.puesto_nombre}
+                                        ${turnoBadge}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success px-3 py-2 fs-6 fw-bold">
+                                            ${item.cantidad_asistentes}
+                                        </span>
+                                    </td>
+                                    <td class="small text-muted">${item.observaciones || '-'}</td>
+                                    <td class="small text-muted">
+                                        <div><i class="bi bi-person me-1"></i>${item.registrado_por || '-'}</div>
+                                        ${item.hora_registro_texto ? `
+                                            <div style="font-size: 0.72rem;" class="text-secondary opacity-75">
+                                                <i class="bi bi-clock me-1"></i>${item.hora_registro_texto}
+                                            </div>
+                                        ` : ''}
+                                    </td>
+                                    <td class="pe-4 text-end">
+                                        ${esHoy ? `
+                                            <a href="/asistencias-registro.html?areaId=${item.id_area}${item.id_ubicacion ? '&ubicacionId=' + item.id_ubicacion : ''}" 
+                                               class="btn btn-sm btn-outline-primary" 
+                                               title="Continuar registro del día de hoy">
+                                                <i class="bi bi-pencil me-1"></i> Capturar Hoy
+                                            </a>
+                                        ` : `
+                                            <span class="badge bg-light text-secondary border" title="Esta fecha ya concluyó">
+                                                <i class="bi bi-lock-fill me-1"></i>Cerrada
+                                            </span>
+                                        `}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    } else {
+                        tbodyHistorial.innerHTML = `
+                            <tr>
+                                <td colspan="7" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2"></i> No se encontraron registros de asistencias para el rango seleccionado.
+                                </td>
+                            </tr>
+                        `;
+                    }
+                } catch (err) {
+                    console.error('Error al cargar historial:', err);
+                    tbodyHistorial.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-danger">
+                                <i class="bi bi-exclamation-triangle fs-3 d-block mb-1"></i> Error al cargar el historial.
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+
+            selectArea.addEventListener('change', () => {
+                selectUbicacion.value = '';
+                cargarHistorial();
+            });
+
+            formFiltro.addEventListener('submit', (e) => {
+                e.preventDefault();
+                cargarHistorial();
+            });
+
+            cargarHistorial();
+        });
+    </script>
+</body>
+</html>

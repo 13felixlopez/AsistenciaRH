@@ -1,0 +1,221 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-1 text-dark">Registrar Nuevo Usuario</h2>
+        <p class="text-muted mb-0">Crea credenciales de acceso y asigna las áreas y ubicaciones autorizadas.</p>
+    </div>
+    <div>
+        <a href="/usuarios" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+            <i class="bi bi-arrow-left"></i>
+            <span>Volver a Usuarios</span>
+        </a>
+    </div>
+</div>
+
+<%- include('../partials/alerts') %>
+
+<form action="/usuarios/nuevo" method="POST" id="formNuevoUsuario">
+    <div class="row g-4">
+        <!-- Columna de Datos de la Cuenta -->
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-person-badge text-primary me-2"></i> Datos de la Cuenta</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label fw-semibold">Nombre Completo <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej. Roberto Sánchez" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="usuario" class="form-label fw-semibold">Nombre de Usuario <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light text-muted">@</span>
+                            <input type="text" class="form-control" id="usuario" name="usuario" placeholder="ej. rsanchez" required pattern="[a-zA-Z0-9._-]+" title="Solo letras, números, puntos, guiones y guiones bajos">
+                        </div>
+                        <div class="form-text">Identificador para iniciar sesión (sin espacios).</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="email" class="form-label fw-semibold">Correo Electrónico <span class="text-danger">*</span></label>
+                        <input type="email" class="form-control" id="email" name="email" placeholder="usuario@empresa.com" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label fw-semibold">Contraseña Inicial <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="password" name="password" placeholder="Mínimo 6 caracteres" required minlength="6">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="cargo" class="form-label fw-semibold">Puesto / Cargo en la Empresa</label>
+                        <input type="text" class="form-control" id="cargo" name="cargo" placeholder="Ej. Supervisor de Producción, Encargado de Patio">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="id_rol" class="form-label fw-semibold">Rol del Sistema <span class="text-danger">*</span></label>
+                        <select name="id_rol" id="id_rol" class="form-select" required onchange="toggleAreaSelection()">
+                            <% roles.forEach(function(r) { %>
+                                <option value="<%= r.id_rol %>" data-codigo="<%= r.codigo %>" <%= r.codigo === 'SUPERVISOR' ? 'selected' : '' %>>
+                                    <%= r.nombre %> (<%= r.codigo %>)
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-text">
+                            <strong>ADMIN:</strong> Acceso total a todas las áreas y ubicaciones.<br>
+                            <strong>SUPERVISOR:</strong> Registra asistencia y ve reportes de sus áreas asignadas.<br>
+                            <strong>SOLO VISTA:</strong> Solo lectura de reportes e historial de sus áreas asignadas.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna de Asignación de Áreas y Ubicaciones -->
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-shield-check text-success me-2"></i> Áreas y Ubicaciones Autorizadas</h5>
+                        <small class="text-muted">Filtro de acceso por usuario</small>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnSelectAllAreas">Marcar Todas</button>
+                </div>
+                <div class="card-body p-4">
+                    <div id="adminNotice" class="alert alert-info d-none mb-3">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        <strong>Rol Administrador:</strong> Este usuario tendrá acceso total automático a todas las áreas y ubicaciones.
+                    </div>
+
+                    <div id="areasContainer">
+                        <p class="text-muted small mb-3">
+                            <i class="bi bi-info-circle me-1"></i> Selecciona las áreas y las ubicaciones específicas a las que este usuario tendrá permiso:
+                        </p>
+
+                        <div class="list-group">
+                            <% if (areas && areas.length > 0) { %>
+                                <% areas.forEach(function(a) { %>
+                                    <div class="list-group-item py-3 px-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <input class="form-check-input check-area" 
+                                                   type="checkbox" 
+                                                   name="areas" 
+                                                   value="<%= a.id_area %>" 
+                                                   id="area_chk_<%= a.id_area %>"
+                                                   data-area-id="<%= a.id_area %>">
+                                            <label class="form-check-label fw-bold text-dark cursor-pointer mb-0 flex-grow-1" for="area_chk_<%= a.id_area %>">
+                                                <%= a.nombre %> 
+                                                <span class="badge bg-light text-muted border ms-1 small"><%= a.codigo %></span>
+                                            </label>
+                                        </div>
+
+                                        <!-- Ubicaciones hijas del área -->
+                                        <% if (a.ubicaciones && a.ubicaciones.length > 0) { %>
+                                            <div class="ms-4 mt-2 ps-3 border-start border-2 border-warning-subtle py-1 bg-light rounded-3 p-2">
+                                                <small class="text-muted fw-semibold d-block mb-1">
+                                                    <i class="bi bi-geo-alt-fill text-warning me-1"></i> Ubicaciones específicas en <%= a.nombre %>:
+                                                </small>
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <% a.ubicaciones.forEach(function(u) { %>
+                                                        <label class="form-check form-check-inline bg-white px-2 py-1 rounded border small mb-0 shadow-sm">
+                                                            <input class="form-check-input check-ubicacion check-ub-area-<%= a.id_area %>" 
+                                                                   type="checkbox" 
+                                                                   name="ubicaciones" 
+                                                                   value="<%= u.id_ubicacion %>"
+                                                                   data-area-id="<%= a.id_area %>">
+                                                            <span class="form-check-label fw-semibold text-secondary"><%= u.nombre %></span>
+                                                        </label>
+                                                    <% }); %>
+                                                </div>
+                                            </div>
+                                        <% } %>
+                                    </div>
+                                <% }); %>
+                            <% } else { %>
+                                <div class="text-muted text-center py-3">No existen áreas registradas aún.</div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4 text-end">
+        <a href="/usuarios" class="btn btn-secondary me-2">Cancelar</a>
+        <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">
+            <i class="bi bi-check-lg me-1"></i> Guardar Usuario
+        </button>
+    </div>
+</form>
+
+<script>
+function toggleAreaSelection() {
+    const select = document.getElementById('id_rol');
+    const selectedOption = select.options[select.selectedIndex];
+    const rolCodigo = selectedOption.getAttribute('data-codigo');
+    const notice = document.getElementById('adminNotice');
+    const container = document.getElementById('areasContainer');
+    const btnSelectAll = document.getElementById('btnSelectAllAreas');
+
+    if (rolCodigo === 'ADMIN') {
+        notice.classList.remove('d-none');
+        notice.className = 'alert alert-info mb-3';
+        notice.innerHTML = '<i class="bi bi-info-circle-fill me-2"></i><strong>Rol Administrador:</strong> Este usuario tendrá acceso total automático a todas las áreas y ubicaciones.';
+        container.style.opacity = '0.5';
+        btnSelectAll.disabled = true;
+    } else if (rolCodigo === 'CONSULTOR') {
+        notice.classList.remove('d-none');
+        notice.className = 'alert alert-warning mb-3';
+        notice.innerHTML = '<i class="bi bi-eye-fill me-2"></i><strong>Usuario de Solo Vista:</strong> Podrá consultar reportes e historial exclusivamente de las áreas seleccionadas abajo. No podrá capturar ni modificar asistencias ni catálogos.';
+        container.style.opacity = '1';
+        btnSelectAll.disabled = false;
+    } else {
+        notice.classList.add('d-none');
+        container.style.opacity = '1';
+        btnSelectAll.disabled = false;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    toggleAreaSelection();
+
+    const btnSelectAll = document.getElementById('btnSelectAllAreas');
+    let allSelected = false;
+
+    btnSelectAll.addEventListener('click', () => {
+        allSelected = !allSelected;
+        document.querySelectorAll('.check-area').forEach(chk => chk.checked = allSelected);
+        document.querySelectorAll('.check-ubicacion').forEach(chk => chk.checked = allSelected);
+        btnSelectAll.textContent = allSelected ? 'Desmarcar Todas' : 'Marcar Todas';
+    });
+
+    // Sincronización padre-hijo (Área <-> Ubicaciones)
+    document.querySelectorAll('.check-area').forEach(chkArea => {
+        chkArea.addEventListener('change', () => {
+            const areaId = chkArea.getAttribute('data-area-id');
+            const ubicacionesHijas = document.querySelectorAll(`.check-ub-area-${areaId}`);
+            if (chkArea.checked) {
+                // Al marcar área, si no tiene ninguna ubicación marcada, marcarlas todas por defecto
+                const algunaMarcada = Array.from(ubicacionesHijas).some(u => u.checked);
+                if (!algunaMarcada) {
+                    ubicacionesHijas.forEach(u => u.checked = true);
+                }
+            } else {
+                // Al desmarcar área, desmarcar sus ubicaciones
+                ubicacionesHijas.forEach(u => u.checked = false);
+            }
+        });
+    });
+
+    // Si se marca una ubicación hija, automáticamente se marca su área
+    document.querySelectorAll('.check-ubicacion').forEach(chkUb => {
+        chkUb.addEventListener('change', () => {
+            const areaId = chkUb.getAttribute('data-area-id');
+            const parentAreaChk = document.getElementById(`area_chk_${areaId}`);
+            if (chkUb.checked && parentAreaChk) {
+                parentAreaChk.checked = true;
+            }
+        });
+    });
+});
+</script>

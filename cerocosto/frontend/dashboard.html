@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Principal | Registro de Asistencia</title>
+    <!-- Metadatos PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#860063">
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SweetAlert2 & Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body class="bg-light">
+    <div class="app-wrapper d-flex">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebarMenu"></aside>
+
+        <!-- Main Content Area -->
+        <div class="main-wrapper flex-grow-1 d-flex flex-column min-vh-100 overflow-hidden">
+            <!-- Navbar -->
+            <nav id="appNavbar"></nav>
+
+            <!-- Main Body -->
+            <main class="flex-grow-1 p-3 p-md-4 overflow-auto">
+                <div class="container-fluid p-0">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                        <div>
+                            <h2 class="fw-bold mb-1 text-dark">Panel de Control</h2>
+                            <p class="text-muted mb-0">Resumen operativo y estado general de asistencias.</p>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="/asistencias-registro.html" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm">
+                                <i class="bi bi-pencil-square"></i>
+                                <span>Registrar Asistencia de Hoy</span>
+                            </a>
+                            <a href="/reportes.html" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+                                <i class="bi bi-file-earmark-bar-graph"></i>
+                                <span>Ver Reportes</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Carrusel de Ambientación: Proceso de Café y Patios -->
+                    <div class="card shadow-sm border-0 mb-4 overflow-hidden rounded-4">
+                        <div id="carouselDashboardPatio" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-interval="6000">
+                            <div class="carousel-indicators mb-2">
+                                <button type="button" data-bs-target="#carouselDashboardPatio" data-bs-slide-to="0" class="active" aria-current="true"></button>
+                                <button type="button" data-bs-target="#carouselDashboardPatio" data-bs-slide-to="1"></button>
+                                <button type="button" data-bs-target="#carouselDashboardPatio" data-bs-slide-to="2"></button>
+                                <button type="button" data-bs-target="#carouselDashboardPatio" data-bs-slide-to="3"></button>
+                            </div>
+                            <div class="carousel-inner" style="height: 180px;">
+                                <div class="carousel-item active h-100">
+                                    <img src="/img/fotos-patio/patios-secado-1.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Patios de Secado" style="filter: brightness(0.75);">
+                                    <div class="carousel-caption d-flex flex-column justify-content-center text-start p-3 p-md-4 top-0 bottom-0 start-0" style="max-width: 600px;">
+                                        <span class="badge bg-warning text-dark fw-bold mb-2 align-self-start text-uppercase small">Patios & Beneficio</span>
+                                        <h4 class="fw-bold text-white mb-1">Manejo y Secado en Patios</h4>
+                                        <p class="text-white-50 small mb-0 d-none d-sm-block">Supervisión constante de secado natural Arábico y Robusta con control diario de cuadrillas y turnos.</p>
+                                    </div>
+                                </div>
+                                <div class="carousel-item h-100">
+                                    <img src="/img/fotos-patio/cosecha-cerezas-1.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Cosecha de Café" style="filter: brightness(0.75);">
+                                    <div class="carousel-caption d-flex flex-column justify-content-center text-start p-3 p-md-4 top-0 bottom-0 start-0" style="max-width: 600px;">
+                                        <span class="badge bg-danger fw-bold mb-2 align-self-start text-uppercase small">Cosecha & Calidad</span>
+                                        <h4 class="fw-bold text-white mb-1">Cosecha Manual desde el Origen</h4>
+                                        <p class="text-white-50 small mb-0 d-none d-sm-block">Recolección de cerezas maduras garantizando estándares de calidad en cada grano procesado.</p>
+                                    </div>
+                                </div>
+                                <div class="carousel-item h-100">
+                                    <img src="/img/fotos-patio/mano-obra-1.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Mano de Obra" style="filter: brightness(0.75);">
+                                    <div class="carousel-caption d-flex flex-column justify-content-center text-start p-3 p-md-4 top-0 bottom-0 start-0" style="max-width: 600px;">
+                                        <span class="badge bg-success fw-bold mb-2 align-self-start text-uppercase small">Mano de Obra</span>
+                                        <h4 class="fw-bold text-white mb-1">Compromiso de Nuestro Personal</h4>
+                                        <p class="text-white-50 small mb-0 d-none d-sm-block">Trazabilidad operativa de asistencia por área, ubicación y puesto de trabajo.</p>
+                                    </div>
+                                </div>
+                                <div class="carousel-item h-100">
+                                    <img src="/img/fotos-patio/mano-obra-2.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Operación en Planta" style="filter: brightness(0.75);">
+                                    <div class="carousel-caption d-flex flex-column justify-content-center text-start p-3 p-md-4 top-0 bottom-0 start-0" style="max-width: 600px;">
+                                        <span class="badge bg-primary fw-bold mb-2 align-self-start text-uppercase small">Producción Continua</span>
+                                        <h4 class="fw-bold text-white mb-1">Eficiencia Operativa</h4>
+                                        <p class="text-white-50 small mb-0 d-none d-sm-block">Registro en tiempo real para optimizar recursos y rendimientos en planta y patios.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="carousel-control-prev" type="button" data-bs-target="#carouselDashboardPatio" data-bs-slide="prev">
+                                <span class="carousel-control-prev-icon p-2 rounded-circle" style="background-color: rgba(0,0,0,0.35);" aria-hidden="true"></span>
+                                <span class="visually-hidden">Anterior</span>
+                            </button>
+                            <button class="carousel-control-next" type="button" data-bs-target="#carouselDashboardPatio" data-bs-slide="next">
+                                <span class="carousel-control-next-icon p-2 rounded-circle" style="background-color: rgba(0,0,0,0.35);" aria-hidden="true"></span>
+                                <span class="visually-hidden">Siguiente</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tarjetas de Estadísticas -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="card shadow-sm border-0 stat-card">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Áreas Disponibles</span>
+                                        <h3 class="fw-bold my-1 text-dark" id="statTotalAreas">-</h3>
+                                        <small class="text-primary"><i class="bi bi-diagram-3 me-1"></i> Áreas autorizadas</small>
+                                    </div>
+                                    <div class="stat-icon bg-primary-subtle text-primary">
+                                        <i class="bi bi-building"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="card shadow-sm border-0 stat-card stat-success">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Puestos de Trabajo</span>
+                                        <h3 class="fw-bold my-1 text-dark" id="statTotalPuestos">-</h3>
+                                        <small class="text-success"><i class="bi bi-briefcase me-1"></i> En tus áreas</small>
+                                    </div>
+                                    <div class="stat-icon bg-success-subtle text-success">
+                                        <i class="bi bi-people-fill"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="card shadow-sm border-0 stat-card stat-warning">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Asistencias Hoy</span>
+                                        <h3 class="fw-bold my-1 text-dark" id="statTotalAsistencias">-</h3>
+                                        <small class="text-warning"><i class="bi bi-calendar-check me-1"></i> Personas registradas</small>
+                                    </div>
+                                    <div class="stat-icon bg-warning-subtle text-warning">
+                                        <i class="bi bi-check2-circle"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="card shadow-sm border-0 stat-card stat-danger">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Tu Rol</span>
+                                        <h4 class="fw-bold my-1 text-truncate text-dark" id="statUserRol" style="max-width: 150px;">-</h4>
+                                        <small class="text-muted"><i class="bi bi-shield-check me-1"></i> Nivel de acceso</small>
+                                    </div>
+                                    <div class="stat-icon bg-danger-subtle text-danger">
+                                        <i class="bi bi-person-badge"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 mb-4">
+                        <!-- Gráfico de Asistencias Recientes -->
+                        <div class="col-lg-7">
+                            <div class="card shadow-sm border-0 h-100">
+                                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                                    <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-graph-up text-primary me-2"></i> Asistencia en los Últimos 7 Días</h5>
+                                    <span class="badge bg-light text-muted border">Totales Diarios</span>
+                                </div>
+                                <div class="card-body p-3" id="chartContainer">
+                                    <div style="position: relative; height: 260px;">
+                                        <canvas id="dashboardChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Áreas Autorizadas -->
+                        <div class="col-lg-5">
+                            <div class="card shadow-sm border-0 h-100">
+                                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                                    <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-diagram-3-fill text-indigo me-2"></i> Mis Áreas Asignadas</h5>
+                                    <span class="badge bg-primary rounded-pill" id="badgeTotalAreasCount">0</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="list-group list-group-flush" id="listAllowedAreas">
+                                        <div class="p-4 text-center text-muted">
+                                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                            Cargando áreas asignadas...
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Últimos Registros de Asistencia -->
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                            <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-clock-history text-info me-2"></i> Registros Recientes de Asistencia</h5>
+                            <a href="/asistencias-historial.html" class="btn btn-sm btn-light border text-primary fw-semibold">Ver Todo el Historial</a>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-4">Fecha</th>
+                                            <th>Área</th>
+                                            <th>Puesto</th>
+                                            <th class="text-center">Asistentes</th>
+                                            <th>Registrado Por</th>
+                                            <th class="pe-4 text-end">Fecha / Hora</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbodyUltimosRegistros">
+                                        <tr>
+                                            <td colspan="6" class="text-center py-4 text-muted">
+                                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                                Cargando registros recientes...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Footer -->
+            <footer id="appFooter"></footer>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle & App Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            initAppLayout('dashboard');
+
+            const currentUser = Auth.getUser();
+            if (currentUser) {
+                document.getElementById('statUserRol').textContent = currentUser.rol_nombre || (currentUser.rol_codigo === 'ADMIN' ? 'Administrador' : 'Supervisor');
+            }
+
+            try {
+                const res = await api.get('/dashboard');
+                if (res.success && res.data) {
+                    const data = res.data;
+                    document.getElementById('statTotalAreas').textContent = data.totalAreas;
+                    document.getElementById('statTotalPuestos').textContent = data.totalPuestos;
+                    document.getElementById('statTotalAsistencias').textContent = data.totalAsistenciasHoy;
+                    document.getElementById('badgeTotalAreasCount').textContent = (data.allowedAreas || []).length;
+
+                    // 1. Áreas Asignadas
+                    const areasListEl = document.getElementById('listAllowedAreas');
+                    if (data.allowedAreas && data.allowedAreas.length > 0) {
+                        areasListEl.innerHTML = data.allowedAreas.map(area => `
+                            <div class="list-group-item py-3 px-3 d-flex align-items-center justify-content-between">
+                                <div>
+                                    <h6 class="mb-0 fw-bold text-dark">${area.nombre}</h6>
+                                    <small class="text-muted">${area.codigo} - ${area.descripcion || 'Sin descripción'}</small>
+                                </div>
+                                <a href="/asistencias-registro.html?areaId=${area.id_area}" class="btn btn-sm btn-outline-primary" title="Registrar asistencia en esta área">
+                                    <i class="bi bi-pencil me-1"></i> Registrar
+                                </a>
+                            </div>
+                        `).join('');
+                    } else {
+                        areasListEl.innerHTML = `
+                            <div class="p-4 text-center text-muted">
+                                <i class="bi bi-lock fs-2 d-block mb-2"></i>
+                                No tienes áreas asignadas actualmente. Contacta al administrador.
+                            </div>
+                        `;
+                    }
+
+                    // 2. Gráfico de Últimos 7 Días
+                    const chartCanvas = document.getElementById('dashboardChart');
+                    if (data.graficoDias && data.graficoDias.length > 0) {
+                        const labels = data.graficoDias.map(d => {
+                            const parts = (d.fecha || '').split('-');
+                            return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d.fecha;
+                        });
+                        const dataValues = data.graficoDias.map(d => d.total_asistencias);
+
+                        new Chart(chartCanvas, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Total Asistentes',
+                                    data: dataValues,
+                                    borderColor: '#860063',
+                                    backgroundColor: 'rgba(134, 0, 99, 0.1)',
+                                    borderWidth: 2,
+                                    fill: true,
+                                    tension: 0.35,
+                                    pointBackgroundColor: '#860063',
+                                    pointRadius: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: { stepSize: 5 }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    } else {
+                        document.getElementById('chartContainer').innerHTML = `
+                            <div class="text-center py-5 text-muted">
+                                <i class="bi bi-clipboard-x fs-1 d-block mb-2 text-secondary"></i>
+                                Aún no hay suficientes datos registrados en la última semana.
+                            </div>
+                        `;
+                    }
+
+                    // 3. Tabla de Últimos Registros
+                    const tbody = document.getElementById('tbodyUltimosRegistros');
+                    if (data.ultimosRegistros && data.ultimosRegistros.length > 0) {
+                        tbody.innerHTML = data.ultimosRegistros.map(r => {
+                            let fechaFormatted = r.fecha;
+                            try {
+                                const parts = r.fecha.split('-');
+                                if (parts.length === 3) {
+                                    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+                                    fechaFormatted = d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+                                }
+                            } catch (e) {}
+
+                            let turnoBadge = '';
+                            if (r.turno === 'TURNO 1' || r.turno === 'TURNO_1') {
+                                turnoBadge = `<span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-1" style="font-size: 0.72rem;"><i class="bi bi-sun-fill text-warning me-1"></i>Turno 1</span>`;
+                            } else if (r.turno === 'TURNO 2' || r.turno === 'TURNO_2') {
+                                turnoBadge = `<span class="badge bg-info-subtle text-dark border border-info-subtle ms-1" style="font-size: 0.72rem;"><i class="bi bi-moon-fill text-info me-1"></i>Turno 2</span>`;
+                            }
+
+                            let ubicacionBadge = r.ubicacion_nombre 
+                                ? `<span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-1" style="font-size: 0.72rem;"><i class="bi bi-geo-alt-fill text-warning me-1"></i>${r.ubicacion_nombre}</span>`
+                                : '';
+
+                            return `
+                                <tr>
+                                    <td class="ps-4 fw-bold text-dark">
+                                        <i class="bi bi-calendar3 me-1 text-primary"></i>
+                                        ${fechaFormatted}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">${r.area_nombre}</span>
+                                        ${ubicacionBadge}
+                                    </td>
+                                    <td class="fw-semibold text-secondary">
+                                        ${r.puesto_nombre}
+                                        ${turnoBadge}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success px-3 py-2 fs-6">${r.cantidad_asistentes} pers.</span>
+                                    </td>
+                                    <td class="small text-muted"><i class="bi bi-person me-1"></i>${r.usuario_registro || '-'}</td>
+                                    <td class="pe-4 text-end small text-muted">
+                                        <i class="bi bi-clock me-1 text-secondary"></i>${r.fecha_registro_texto || '-'}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    } else {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-3 d-block mb-1"></i> No se han registrado asistencias aún.
+                                </td>
+                            </tr>
+                        `;
+                    }
+                }
+            } catch (err) {
+                console.error('Error cargando dashboard:', err);
+                showToast('error', 'Error al cargar los datos del panel');
+            }
+        });
+    </script>
+</body>
+</html>

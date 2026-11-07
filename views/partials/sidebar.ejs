@@ -1,0 +1,103 @@
+<aside class="sidebar bg-white border-end d-flex flex-column" id="sidebarMenu">
+    <div class="sidebar-header p-3 border-bottom d-flex align-items-center justify-content-between">
+        <a href="<%= locals.currentUser && locals.currentUser.rol_codigo === 'ADMIN' ? '/dashboard' : (locals.currentUser && (locals.currentUser.rol_codigo === 'CONSULTOR' || locals.currentUser.id_rol === 3) ? '/reportes' : '/asistencias/registro') %>" class="text-decoration-none d-flex align-items-center gap-2">
+            <div class="brand-icon bg-white rounded-3 d-flex align-items-center justify-content-center p-1 border shadow-sm" style="width: 42px; height: 42px;">
+                <img src="/img/logo.png" alt="Logo" class="img-fluid" style="max-height: 34px; object-fit: contain;">
+            </div>
+            <div>
+                <span class="fs-6 fw-bold text-dark d-block lh-1">Registro de <span class="text-primary">Asistencia</span></span>
+                <small class="text-muted" style="font-size: 0.72rem;">Control por Áreas & Puestos</small>
+            </div>
+        </a>
+    </div>
+
+    <div class="sidebar-user px-3 py-3 border-bottom bg-light-subtle">
+        <div class="d-flex align-items-center gap-2">
+            <div class="user-avatar bg-primary-subtle text-primary fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-size: 0.9rem;">
+                <%= locals.currentUser ? locals.currentUser.nombre.charAt(0).toUpperCase() : 'U' %>
+            </div>
+            <div class="overflow-hidden">
+                <div class="fw-semibold text-truncate text-dark" style="font-size: 0.88rem;"><%= locals.currentUser ? locals.currentUser.nombre : 'Usuario' %></div>
+                <span class="badge <%= locals.currentUser && locals.currentUser.rol_codigo === 'ADMIN' ? 'bg-danger' : (locals.currentUser && (locals.currentUser.rol_codigo === 'CONSULTOR' || locals.currentUser.id_rol === 3) ? 'bg-info text-dark' : 'bg-primary') %>" style="font-size: 0.68rem;">
+                    <%= locals.currentUser ? locals.currentUser.rol_nombre : 'Invitado' %>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-body flex-grow-1 overflow-auto py-2">
+        <ul class="nav nav-pills flex-column px-2 gap-1">
+            <li class="nav-item">
+                <a href="/dashboard" class="nav-link text-secondary d-flex align-items-center gap-2 py-2">
+                    <i class="bi bi-grid-1x2-fill text-primary"></i>
+                    <span>Panel Principal</span>
+                </a>
+            </li>
+
+            <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.7rem; letter-spacing: 0.05rem;">
+                Operaciones
+            </li>
+
+            <% if (!locals.currentUser || (locals.currentUser.rol_codigo !== 'CONSULTOR' && locals.currentUser.id_rol !== 3)) { %>
+                <li class="nav-item">
+                    <a href="/asistencias/registro" class="nav-link text-secondary d-flex align-items-center gap-2 py-2">
+                        <i class="bi bi-pencil-square text-success"></i>
+                        <span>Registrar Asistencia</span>
+                    </a>
+                </li>
+            <% } %>
+
+            <li class="nav-item">
+                <a href="/asistencias/historial" class="nav-link text-secondary d-flex align-items-center gap-2 py-2">
+                    <i class="bi bi-clock-history text-info"></i>
+                    <span>Historial de Registros</span>
+                </a>
+            </li>
+
+            <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.7rem; letter-spacing: 0.05rem;">
+                Análisis & Datos
+            </li>
+
+            <li class="nav-item">
+                <a href="/reportes" class="nav-link text-secondary d-flex align-items-center gap-2 py-2">
+                    <i class="bi bi-bar-chart-fill text-warning"></i>
+                    <span>Reportes & Estadísticas</span>
+                </a>
+            </li>
+
+            <% if (locals.currentUser && locals.currentUser.rol_codigo === 'ADMIN') { %>
+                <li class="nav-header text-uppercase text-danger fw-bold mt-3 mb-1 px-3" style="font-size: 0.7rem; letter-spacing: 0.05rem;">
+                    Administración
+                </li>
+
+                <li class="nav-item">
+                    <a href="/areas" class="nav-link text-secondary d-flex align-items-center gap-2 py-2">
+                        <i class="bi bi-diagram-3-fill text-indigo"></i>
+                        <span>Catálogo de Áreas</span>
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a href="/puestos" class="nav-link text-secondary d-flex align-items-center gap-2 py-2">
+                        <i class="bi bi-briefcase-fill text-teal"></i>
+                        <span>Puestos de Trabajo</span>
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a href="/usuarios" class="nav-link text-secondary d-flex align-items-center gap-2 py-2">
+                        <i class="bi bi-shield-lock-fill text-danger"></i>
+                        <span>Usuarios y Permisos</span>
+                    </a>
+                </li>
+            <% } %>
+        </ul>
+    </div>
+
+    <div class="sidebar-footer p-3 border-top">
+        <a href="/auth/logout" class="btn btn-outline-danger btn-sm w-100 d-flex align-items-center justify-content-center gap-2">
+            <i class="bi bi-box-arrow-right"></i>
+            <span>Cerrar Sesión</span>
+        </a>
+    </div>
+</aside>

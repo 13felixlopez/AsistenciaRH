@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Fondo redondeado suave -->
+  <rect width="512" height="512" rx="112" fill="url(#grad1)" />
+
+  <!-- Tarjeta central con sombra -->
+  <rect x="76" y="86" width="360" height="340" rx="36" fill="#ffffff" filter="url(#shadow)" opacity="0.96" />
+
+  <!-- Encabezado de la tarjeta -->
+  <rect x="76" y="86" width="360" height="74" rx="36" fill="#1e3a8a" />
+  <rect x="76" y="126" width="360" height="34" fill="#1e3a8a" />
+
+  <!-- Puntos del calendario/agenda -->
+  <circle cx="140" cy="86" r="14" fill="url(#grad2)" />
+  <circle cx="372" cy="86" r="14" fill="url(#grad2)" />
+
+  <!-- Silueta de Personal / Usuario -->
+  <circle cx="210" cy="225" r="42" fill="#2563eb" />
+  <path d="M140,335 C140,290 172,275 210,275 C248,275 280,290 280,335 Z" fill="#2563eb" />
+
+  <!-- Marca de verificación / Asistencia Confirmada (Checkmark) -->
+  <circle cx="330" cy="290" r="46" fill="#10b981" filter="url(#shadow)" />
+  <path d="M312,290 L324,302 L350,274" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+
+  <!-- Texto AsistenciaRH inferior -->
+  <text x="256" y="390" font-family="'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="bold" text-anchor="middle" fill="#1e293b">Asistencia<tspan fill="#2563eb">RH</tspan></text>
+</svg>

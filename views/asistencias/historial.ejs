@@ -1,0 +1,180 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-1 text-dark">Historial de Asistencias</h2>
+        <p class="text-muted mb-0">Consulta y seguimiento de todos los registros de asistencia realizados por área y ubicación.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/asistencias/registro" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm">
+            <i class="bi bi-pencil-square"></i>
+            <span>Nuevo Registro</span>
+        </a>
+    </div>
+</div>
+
+<%- include('../partials/alerts') %>
+
+<!-- Filtros de búsqueda -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-3">
+        <form action="/asistencias/historial" method="GET" class="row g-3 align-items-end" id="formHistorial">
+            <div class="col-md-2">
+                <label for="fechaInicio" class="form-label fw-semibold text-secondary small">Desde:</label>
+                <input type="date" class="form-control" id="fechaInicio" name="fechaInicio" value="<%= fechaInicio %>">
+            </div>
+            <div class="col-md-2">
+                <label for="fechaFin" class="form-label fw-semibold text-secondary small">Hasta:</label>
+                <input type="date" class="form-control" id="fechaFin" name="fechaFin" value="<%= fechaFin %>">
+            </div>
+            <div class="col-md-3">
+                <label for="areaId" class="form-label fw-semibold text-secondary small">Filtrar por Área:</label>
+                <select name="areaId" id="areaId" class="form-select" onchange="document.getElementById('formHistorial').submit()">
+                    <% if (areas.length > 1) { %>
+                        <option value="">-- Todas mis Áreas Autorizadas --</option>
+                    <% } %>
+                    <% areas.forEach(function(a) { %>
+                        <option value="<%= a.id_area %>" <%= (selectedAreaId === a.id_area || areas.length === 1) ? 'selected' : '' %>>
+                            <%= a.nombre %>
+                        </option>
+                    <% }); %>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="ubicacionId" class="form-label fw-semibold text-secondary small">Filtrar por Ubicación:</label>
+                <select name="ubicacionId" id="ubicacionId" class="form-select" <%= (!ubicacionesFiltro || ubicacionesFiltro.length === 0) ? 'disabled' : '' %>>
+                    <option value="">-- Todas las Ubicaciones --</option>
+                    <% if (ubicacionesFiltro && ubicacionesFiltro.length > 0) { %>
+                        <% ubicacionesFiltro.forEach(function(u) { %>
+                            <option value="<%= u.id_ubicacion %>" <%= selectedUbicacionId === u.id_ubicacion ? 'selected' : '' %>>
+                                <%= u.nombre %>
+                            </option>
+                        <% }); %>
+                    <% } %>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100 fw-semibold">
+                    <i class="bi bi-filter me-1"></i> Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Resumen Estadístico Rápido -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 bg-primary-subtle text-primary p-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="fw-semibold text-uppercase" style="font-size: 0.75rem;">Total de Asistencias Sumadas</span>
+                    <h3 class="fw-bold my-1 text-primary"><%= totales.personas %> personas</h3>
+                </div>
+                <i class="bi bi-people fs-1 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 bg-success-subtle text-success p-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="fw-semibold text-uppercase" style="font-size: 0.75rem;">Registros / Puestos Evaluados</span>
+                    <h3 class="fw-bold my-1 text-success"><%= totales.registros %> registros</h3>
+                </div>
+                <i class="bi bi-card-checklist fs-1 opacity-50"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de Registros -->
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Fecha</th>
+                        <th>Área / Ubicación</th>
+                        <th>Puesto</th>
+                        <th class="text-center">Cantidad Asistieron</th>
+                        <th>Observaciones</th>
+                        <th>Registrado Por</th>
+                        <th class="pe-4 text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (asistencias && asistencias.length > 0) { %>
+                        <% asistencias.forEach(function(item) { %>
+                            <tr>
+                                <td class="ps-4 fw-bold text-dark">
+                                    <i class="bi bi-calendar-event me-1 text-primary"></i>
+                                    <%= new Date(item.fecha).toISOString().split('T')[0] %>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark"><%= item.area_nombre %></div>
+                                    <% if (item.ubicacion_nombre) { %>
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle small mt-1">
+                                            <i class="bi bi-geo-alt-fill text-warning me-1"></i><%= item.ubicacion_nombre %>
+                                        </span>
+                                    <% } %>
+                                </td>
+                                <td class="fw-semibold text-secondary">
+                                    <%= item.puesto_nombre %>
+                                    <% if (item.turno === 'TURNO_1') { %>
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-1" style="font-size: 0.72rem;">
+                                            <i class="bi bi-sun-fill text-warning me-1"></i>Turno 1
+                                        </span>
+                                    <% } else if (item.turno === 'TURNO_2') { %>
+                                        <span class="badge bg-info-subtle text-dark border border-info-subtle ms-1" style="font-size: 0.72rem;">
+                                            <i class="bi bi-moon-fill text-info me-1"></i>Turno 2
+                                        </span>
+                                    <% } %>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success px-3 py-2 fs-6 fw-bold">
+                                        <%= item.cantidad_asistentes %>
+                                    </span>
+                                </td>
+                                <td class="small text-muted"><%= item.observaciones || '-' %></td>
+                                <td class="small text-muted">
+                                    <div><i class="bi bi-person me-1"></i><%= item.registrado_por %></div>
+                                    <% if (item.hora_registro_texto) { %>
+                                        <div style="font-size: 0.72rem;" class="text-secondary opacity-75">
+                                            <i class="bi bi-clock me-1"></i><%= item.hora_registro_texto %>
+                                        </div>
+                                    <% } %>
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <% 
+                                        const dHoy = new Date();
+                                        const fechaHoyStr = `${dHoy.getFullYear()}-${String(dHoy.getMonth()+1).padStart(2,'0')}-${String(dHoy.getDate()).padStart(2,'0')}`;
+                                        const dItem = new Date(item.fecha);
+                                        const fechaItemStr = `${dItem.getFullYear()}-${String(dItem.getMonth()+1).padStart(2,'0')}-${String(dItem.getDate()).padStart(2,'0')}`;
+                                        const esHoy = fechaItemStr === fechaHoyStr;
+                                    %>
+                                    <% if (esHoy) { %>
+                                        <a href="/asistencias/registro?areaId=<%= item.id_area %><%= item.id_ubicacion ? '&ubicacionId=' + item.id_ubicacion : '' %>" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Continuar registro del día de hoy">
+                                            <i class="bi bi-pencil me-1"></i> Capturar Hoy
+                                        </a>
+                                    <% } else { %>
+                                        <span class="badge bg-light text-secondary border" title="Esta fecha ya concluyó y no puede ser modificada">
+                                            <i class="bi bi-lock-fill me-1"></i>Cerrada
+                                        </span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-2 d-block mb-2"></i> No se encontraron registros de asistencias para el rango seleccionado.
+                            </td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

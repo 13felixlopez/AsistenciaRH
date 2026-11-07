@@ -1,0 +1,27 @@
+<% if (locals.error && locals.error.length > 0) { %>
+    <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill fs-5 me-2"></i>
+            <div>
+                <% error.forEach(function(msg) { %>
+                    <div><%= msg %></div>
+                <% }); %>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+<% } %>
+
+<% if (locals.success && locals.success.length > 0) { %>
+    <div class="alert alert-success alert-dismissible fade show shadow-sm mb-4" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-check-circle-fill fs-5 me-2"></i>
+            <div>
+                <% success.forEach(function(msg) { %>
+                    <div><%= msg %></div>
+                <% }); %>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+<% } %>

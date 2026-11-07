@@ -1,0 +1,120 @@
+<!-- Fondo de Pantalla Completa: Carrusel de Fotos de Patios y Café -->
+<div class="position-fixed top-0 start-0 w-100 h-100 overflow-hidden" style="z-index: 0;">
+    <div id="carouselLoginBackground" class="carousel slide carousel-fade w-100 h-100" data-bs-ride="carousel" data-bs-interval="5000" data-bs-pause="false">
+        <div class="carousel-inner w-100 h-100">
+            <!-- Slide 1: Patios de secado -->
+            <div class="carousel-item active w-100 h-100">
+                <img src="/img/fotos-patio/patios-secado-1.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Secado en Patios" style="transform: scale(1.03); transition: transform 6s ease-out;">
+            </div>
+            <!-- Slide 2: Cosecha en fincas -->
+            <div class="carousel-item w-100 h-100">
+                <img src="/img/fotos-patio/cosecha-cerezas-1.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Cosecha de Cerezas de Café" style="transform: scale(1.03); transition: transform 6s ease-out;">
+            </div>
+            <!-- Slide 3: Mano de obra y cuadrillas -->
+            <div class="carousel-item w-100 h-100">
+                <img src="/img/fotos-patio/mano-obra-1.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Mano de Obra y Equipo" style="transform: scale(1.03); transition: transform 6s ease-out;">
+            </div>
+            <!-- Slide 4: Cerezas seleccionadas -->
+            <div class="carousel-item w-100 h-100">
+                <img src="/img/fotos-patio/cosecha-cerezas-2.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Calidad desde el Origen" style="transform: scale(1.03); transition: transform 6s ease-out;">
+            </div>
+            <!-- Slide 5: Operación y labores -->
+            <div class="carousel-item w-100 h-100">
+                <img src="/img/fotos-patio/mano-obra-2.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Operación en Beneficio" style="transform: scale(1.03); transition: transform 6s ease-out;">
+            </div>
+            <!-- Slide 6: Cosecha cerezas 3 -->
+            <div class="carousel-item w-100 h-100">
+                <img src="/img/fotos-patio/cosecha-cerezas-3.jpg" class="d-block w-100 h-100 object-fit-cover" alt="Recolección de Café" style="transform: scale(1.03); transition: transform 6s ease-out;">
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay oscuro semitransparente con degradado suave sobre todo el fondo -->
+    <div class="position-absolute top-0 start-0 w-100 h-100" 
+         style="background: radial-gradient(circle at center, rgba(20, 8, 25, 0.3) 0%, rgba(10, 5, 18, 0.6) 100%); pointer-events: none;"></div>
+
+    <!-- Leyenda flotante discreta en esquina inferior izquierda -->
+    <div class="position-absolute bottom-0 start-0 m-4 d-none d-md-block text-white" style="z-index: 1; pointer-events: none; text-shadow: 0 2px 8px rgba(0,0,0,0.85);">
+        <span class="badge bg-warning text-dark fw-bold px-3 py-1 mb-2 text-uppercase letter-spacing-1 shadow">
+            <i class="bi bi-geo-alt-fill me-1"></i> Beneficio & Patios de Secado
+        </span>
+        <h5 class="fw-bold mb-0 text-white" style="text-shadow: 0 2px 6px rgba(0,0,0,0.8);">Control Operativo y Trazabilidad de Personal</h5>
+        <small class="text-white-50" style="text-shadow: 0 1px 4px rgba(0,0,0,0.8);">Gestión diaria de asistencia por áreas, líneas y cuadrillas</small>
+    </div>
+</div>
+
+<!-- Contenedor Principal: Tarjeta de Login Ultra Translúcida (Cristal Esmerilado Premium) -->
+<div class="container min-vh-100 d-flex align-items-center justify-content-center p-3 position-relative" style="z-index: 10;">
+    <div class="col-12 col-sm-10 col-md-8 col-lg-5 col-xl-4">
+        <div class="card border-0 shadow-lg rounded-4 overflow-hidden" 
+             style="background: rgba(255, 255, 255, 0.30) !important; backdrop-filter: blur(24px) saturate(200%); -webkit-backdrop-filter: blur(24px) saturate(200%); border: 1.5px solid rgba(255, 255, 255, 0.55) !important; box-shadow: 0 30px 65px rgba(0, 0, 0, 0.5) !important;">
+            
+            <!-- Cabecera de la Tarjeta con Logo -->
+            <div class="p-4 pt-5 pb-3 text-center" style="border-bottom: 1px solid rgba(255, 255, 255, 0.3);">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3 p-2 shadow" 
+                     style="width: 86px; height: 86px; background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(10px); border: 2px solid rgba(255, 255, 255, 0.75);">
+                    <img src="/img/logo.png" alt="Logo Corporativo" class="img-fluid" style="max-height: 60px; object-fit: contain;">
+                </div>
+                <h3 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px; text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);">
+                    Registro de <span style="color: var(--color-orange); text-shadow: 0 1px 2px rgba(0,0,0,0.2);">Asistencia</span>
+                </h3>
+                <p class="text-dark small mb-0 fw-bold opacity-75">Control de Personal por Áreas y Ubicaciones</p>
+            </div>
+
+            <!-- Cuerpo del Formulario -->
+            <div class="card-body p-4 p-md-4">
+                <%- include('../partials/alerts') %>
+
+                <form action="/auth/login" method="POST" class="needs-validation">
+                    <div class="mb-3">
+                        <label for="usuario" class="form-label fw-bold text-dark small mb-1" style="text-shadow: 0 1px 1px rgba(255, 255, 255, 0.8);">Usuario o Correo Electrónico</label>
+                        <div class="input-group shadow-sm rounded-3 overflow-hidden" style="border: 1.5px solid rgba(255, 255, 255, 0.65);">
+                            <span class="input-group-text border-0 text-primary" style="background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(6px);">
+                                <i class="bi bi-person-fill fs-6"></i>
+                            </span>
+                            <input type="text" 
+                                   class="form-control border-0 ps-1" 
+                                   id="usuario" 
+                                   name="usuario" 
+                                   placeholder="admin o usuario@empresa.com" 
+                                   required 
+                                   autofocus 
+                                   autocomplete="username"
+                                   style="background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(6px); color: #111827; font-weight: 600;">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <label for="password" class="form-label fw-bold text-dark small mb-1" style="text-shadow: 0 1px 1px rgba(255, 255, 255, 0.8);">Contraseña</label>
+                        </div>
+                        <div class="input-group shadow-sm rounded-3 overflow-hidden" style="border: 1.5px solid rgba(255, 255, 255, 0.65);">
+                            <span class="input-group-text border-0 text-primary" style="background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(6px);">
+                                <i class="bi bi-lock-fill fs-6"></i>
+                            </span>
+                            <input type="password" 
+                                   class="form-control border-0 ps-1" 
+                                   id="password" 
+                                   name="password" 
+                                   placeholder="••••••••" 
+                                   required 
+                                   autocomplete="current-password"
+                                   style="background: rgba(255, 255, 255, 0.55); backdrop-filter: blur(6px); color: #111827; font-weight: 600;">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-lg rounded-3 d-flex align-items-center justify-content-center gap-2" style="background: var(--color-purple) !important; border: 1px solid rgba(255,255,255,0.4) !important; box-shadow: 0 10px 25px rgba(134, 0, 99, 0.45) !important;">
+                        <i class="bi bi-box-arrow-in-right fs-5"></i>
+                        <span>Iniciar Sesión</span>
+                    </button>
+                </form>
+
+                <div class="mt-4 pt-3 text-center" style="border-top: 1px solid rgba(255, 255, 255, 0.3);">
+                    <small class="text-dark fw-bold d-flex align-items-center justify-content-center gap-1 opacity-90" style="text-shadow: 0 1px 1px rgba(255, 255, 255, 0.8);">
+                        <i class="bi bi-shield-check text-success"></i> Acceso Seguro al Sistema de Asistencias
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

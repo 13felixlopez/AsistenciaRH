@@ -1,0 +1,13 @@
+<div class="text-center py-5">
+    <div class="display-1 fw-bold text-danger mb-2">500</div>
+    <h3 class="fw-bold text-dark mb-2">Error Interno del Servidor</h3>
+    <p class="text-muted mb-4">Ocurrió un problema al procesar la solicitud. Contacta al soporte técnico si el error persiste.</p>
+    <% if (error && error.message) { %>
+        <div class="alert alert-secondary text-start mx-auto p-3 mb-4" style="max-width: 600px; font-family: monospace; font-size: 0.85rem;">
+            <%= error.message %>
+        </div>
+    <% } %>
+    <a href="/dashboard" class="btn btn-primary px-4 fw-semibold">
+        <i class="bi bi-house me-1"></i> Ir al Panel de Control
+    </a>
+</div>

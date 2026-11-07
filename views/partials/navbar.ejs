@@ -1,0 +1,64 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-3 sticky-top">
+    <div class="container-fluid p-0">
+        <button class="btn btn-outline-secondary btn-sm me-2 d-lg-none" type="button" id="sidebarToggle">
+            <i class="bi bi-list fs-5"></i>
+        </button>
+
+        <!-- Logo para vista móvil -->
+        <a href="<%= locals.currentUser && locals.currentUser.rol_codigo === 'ADMIN' ? '/dashboard' : (locals.currentUser && (locals.currentUser.rol_codigo === 'CONSULTOR' || locals.currentUser.id_rol === 3) ? '/reportes' : '/asistencias/registro') %>" class="d-flex d-lg-none align-items-center gap-2 text-decoration-none me-2">
+            <img src="/img/logo.png" alt="Logo" style="height: 30px; object-fit: contain;">
+            <span class="fw-bold text-dark fs-6">Registro de <span class="text-primary">Asistencia</span></span>
+        </a>
+
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-light text-dark border d-none d-sm-inline-flex align-items-center gap-1">
+                <i class="bi bi-calendar3 text-primary"></i>
+                <span id="currentDateDisplay"><%= new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) %></span>
+            </span>
+        </div>
+
+        <div class="ms-auto d-flex align-items-center gap-2 gap-md-3">
+            <!-- Botón PWA para instalar la app en móvil o PC -->
+            <button class="btn btn-outline-primary btn-sm d-none align-items-center gap-1 shadow-sm" id="btnInstallPwa" type="button" title="Instalar como aplicación en este dispositivo">
+                <i class="bi bi-download"></i>
+                <span class="d-none d-sm-inline fw-semibold">Instalar App</span>
+            </button>
+
+            <% if (!locals.currentUser || (locals.currentUser.rol_codigo !== 'CONSULTOR' && locals.currentUser.id_rol !== 3)) { %>
+                <a href="/asistencias/registro" class="btn btn-primary btn-sm d-flex align-items-center gap-1 shadow-sm">
+                    <i class="bi bi-plus-circle"></i>
+                    <span class="d-none d-md-inline">Capturar Asistencia</span>
+                </a>
+            <% } %>
+
+            <div class="dropdown">
+                <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle" id="userMenuDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2 shadow-sm" style="width: 32px; height: 32px; font-size: 0.85rem; font-weight: 600;">
+                        <%= locals.currentUser ? locals.currentUser.nombre.charAt(0).toUpperCase() : 'U' %>
+                    </div>
+                    <span class="d-none d-md-inline fw-semibold" style="font-size: 0.9rem;">
+                        <%= locals.currentUser ? locals.currentUser.nombre : 'Usuario' %>
+                    </span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" aria-labelledby="userMenuDropdown" style="min-width: 200px;">
+                    <li class="px-3 py-2 border-bottom">
+                        <div class="fw-bold text-dark"><%= locals.currentUser ? locals.currentUser.nombre : '' %></div>
+                        <div class="small text-primary fw-semibold"><%= locals.currentUser && locals.currentUser.usuario ? '@' + locals.currentUser.usuario : '' %></div>
+                        <small class="text-muted"><%= locals.currentUser ? locals.currentUser.email : '' %></small>
+                    </li>
+                    <li>
+                        <a class="dropdown-item py-2 d-flex align-items-center gap-2" href="/auth/perfil">
+                            <i class="bi bi-person text-secondary"></i> Mi Perfil
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li>
+                        <a class="dropdown-item py-2 d-flex align-items-center gap-2 text-danger" href="/auth/logout">
+                            <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</nav>

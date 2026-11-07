@@ -1,0 +1,31 @@
+{
+  "name": "asistenciarh-cerocosto",
+  "version": "1.0.0",
+  "description": "Sistema de Control de Asistencia RH desplegado en Netlify Functions + Turso DB (Cero Costo)",
+  "main": "netlify/functions/api.js",
+  "scripts": {
+    "start": "node backend/app.js",
+    "init-db": "node database/init_turso.js"
+  },
+  "keywords": [
+    "asistencia",
+    "turso",
+    "netlify",
+    "serverless",
+    "sqlite",
+    "libsql",
+    "pwa"
+  ],
+  "author": "Antigravity",
+  "license": "ISC",
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "serverless-http": "^3.2.0"
+  }
+}

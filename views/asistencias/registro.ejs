@@ -1,0 +1,302 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-3">
+    <div>
+        <h2 class="fw-bold mb-1 text-dark fs-4 fs-md-2">Registro Diario de Asistencia</h2>
+        <p class="text-muted mb-0 small">Captura la cantidad de personal asistente por puesto en el área y ubicación seleccionada.</p>
+    </div>
+    <div class="d-none d-sm-block">
+        <a href="/asistencias/historial" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
+            <i class="bi bi-clock-history"></i>
+            <span>Ver Historial</span>
+        </a>
+    </div>
+</div>
+
+<%- include('../partials/alerts') %>
+
+<!-- Selector de Fecha, Área y Ubicación -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body p-3 p-md-4">
+        <form action="/asistencias/registro" method="GET" class="row g-2 g-md-3 align-items-end" id="formSeleccionJornada">
+            <!-- Fecha -->
+            <div class="col-12 col-sm-6 col-md-3">
+                <label for="fecha" class="form-label fw-semibold text-secondary small mb-1">
+                    <i class="bi bi-calendar-check me-1 text-primary"></i> Fecha:
+                </label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0 text-primary">
+                        <i class="bi bi-calendar3"></i>
+                    </span>
+                    <input type="date" 
+                           class="form-control form-control-lg fs-6 border-start-0 bg-light" 
+                           id="fecha" 
+                           name="fecha" 
+                           value="<%= hoy %>" 
+                           min="<%= hoy %>" 
+                           max="<%= hoy %>" 
+                           readonly 
+                           tabindex="-1">
+                </div>
+            </div>
+
+            <!-- Área Operativa -->
+            <div class="col-12 col-sm-6 <%= (ubicacionesDisponibles && ubicacionesDisponibles.length > 0) ? 'col-md-4' : 'col-md-6' %>">
+                <label for="areaId" class="form-label fw-semibold text-secondary small mb-1">
+                    <i class="bi bi-building me-1 text-primary"></i> Área Operativa:
+                </label>
+                <select name="areaId" id="areaId" class="form-select form-select-lg fs-6" required onchange="this.form.submit()">
+                    <% if (areas.length > 1) { %>
+                        <option value="">-- Seleccione un Área --</option>
+                    <% } else if (areas.length === 0) { %>
+                        <option value="">-- Sin áreas asignadas --</option>
+                    <% } %>
+                    <% areas.forEach(function(a) { %>
+                        <option value="<%= a.id_area %>" <%= (selectedAreaId === a.id_area || areas.length === 1) ? 'selected' : '' %>>
+                            <%= a.nombre %> (<%= a.codigo %>)
+                        </option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <!-- Selector de Ubicación (solo si el área tiene ubicaciones autorizadas) -->
+            <% if (ubicacionesDisponibles && ubicacionesDisponibles.length > 0) { %>
+                <div class="col-12 col-sm-6 col-md-3">
+                    <label for="ubicacionId" class="form-label fw-semibold text-secondary small mb-1">
+                        <i class="bi bi-geo-alt-fill me-1 text-warning"></i> Ubicación / Línea:
+                    </label>
+                    <select name="ubicacionId" id="ubicacionId" class="form-select form-select-lg fs-6 border-warning" required onchange="this.form.submit()">
+                        <option value="">-- Seleccionar Ubicación --</option>
+                        <% ubicacionesDisponibles.forEach(function(u) { %>
+                            <option value="<%= u.id_ubicacion %>" <%= selectedUbicacionId === u.id_ubicacion ? 'selected' : '' %>>
+                                <%= u.nombre %>
+                            </option>
+                        <% }); %>
+                    </select>
+                </div>
+            <% } %>
+
+            <!-- Botón Cargar -->
+            <div class="col-12 <%= (ubicacionesDisponibles && ubicacionesDisponibles.length > 0) ? 'col-md-2' : 'col-md-3' %>">
+                <button type="submit" class="btn btn-primary btn-lg w-100 fw-semibold fs-6 d-flex align-items-center justify-content-center gap-2 py-2">
+                    <i class="bi bi-arrow-repeat"></i>
+                    <span>Cargar</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<% if (selectedAreaId && areaSeleccionadaInfo) { %>
+    <!-- Validación de selección de ubicación si el área tiene ubicaciones -->
+    <% if (ubicacionesDisponibles && ubicacionesDisponibles.length > 0 && !selectedUbicacionId) { %>
+        <div class="card shadow-sm border-warning border-2 p-4 text-center my-4 bg-light">
+            <div class="mx-auto mb-2 text-warning fs-1">
+                <i class="bi bi-geo-alt"></i>
+            </div>
+            <h5 class="fw-bold text-dark mb-1">Selecciona una Ubicación para <%= areaSeleccionadaInfo.nombre %></h5>
+            <p class="text-muted small mb-3">Esta área cuenta con distintas ubicaciones autorizadas (ej. Arábiga, Robusta o Patios). Elige en el selector superior para desplegar los puestos correspondientes.</p>
+            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                <% ubicacionesDisponibles.forEach(function(u) { %>
+                    <a href="/asistencias/registro?areaId=<%= selectedAreaId %>&ubicacionId=<%= u.id_ubicacion %>" class="btn btn-outline-warning text-dark fw-semibold shadow-sm">
+                        <i class="bi bi-geo-alt-fill text-warning me-1"></i> <%= u.nombre %>
+                    </a>
+                <% }); %>
+            </div>
+        </div>
+    <% } else { %>
+        <!-- Formulario de Captura de Asistencias por Puesto -->
+        <div class="card shadow-sm border-0 mb-5">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2 flex-wrap">
+                        <i class="bi bi-diagram-3-fill text-primary"></i> 
+                        <span><%= areaSeleccionadaInfo.nombre %></span>
+                        <% if (ubicacionSeleccionadaInfo) { %>
+                            <span class="badge bg-warning text-dark border border-warning px-3 py-1 fs-6">
+                                <i class="bi bi-geo-alt-fill me-1"></i> <%= ubicacionSeleccionadaInfo.nombre %>
+                            </span>
+                        <% } %>
+                    </h5>
+                    <small class="text-muted">
+                        Fecha: <strong><%= selectedDate %></strong> | <%= puestos.length %> puestos/turnos disponibles
+                    </small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <% if (isAdmin) { %>
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 small">
+                            <i class="bi bi-shield-lock-fill me-1"></i> Admin: Edición Habilitada
+                        </span>
+                    <% } %>
+                    <div class="bg-primary-subtle border border-primary-subtle rounded-3 px-3 py-1 text-center shadow-sm">
+                        <small class="text-primary fw-semibold d-block" style="font-size: 0.72rem;">TOTAL ASISTENTES</small>
+                        <span class="fs-4 fw-bold text-primary" id="totalAsistentesCalculado">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                <% if (puestos && puestos.length > 0) { %>
+                    <form action="/asistencias/guardar" method="POST" id="formGuardarAsistencias">
+                        <input type="hidden" name="fecha" value="<%= selectedDate %>">
+                        <input type="hidden" name="id_area" value="<%= selectedAreaId %>">
+                        <% if (selectedUbicacionId) { %>
+                            <input type="hidden" name="id_ubicacion" value="<%= selectedUbicacionId %>">
+                        <% } %>
+
+                        <!-- Lista de Puestos -->
+                        <div class="puestos-container">
+                            <% puestos.forEach(function(p, index) { %>
+                                <div class="puesto-row p-3 border-bottom <%= !p.editable ? 'bg-light-subtle opacity-75' : (index % 2 === 0 ? 'bg-white' : 'bg-light-subtle') %>">
+                                    <div class="row g-2 align-items-center">
+                                        <!-- Nombre del Puesto y Turno -->
+                                        <div class="col-12 col-md-5">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span class="fw-bold text-dark fs-6"><%= p.puesto_nombre %></span>
+                                                    <% if (p.aplica_turnos) { %>
+                                                        <span class="badge bg-<%= p.turno_badge %>-subtle text-dark border border-<%= p.turno_badge %>-subtle" style="font-size: 0.72rem;">
+                                                            <% if (p.turno_icon) { %><i class="bi bi-<%= p.turno_icon %>-fill text-<%= p.turno_badge %> me-1"></i><% } %>
+                                                            <%= p.turno_label %>
+                                                        </span>
+                                                    <% } %>
+                                                </div>
+                                                <span class="badge-status-puesto">
+                                                    <% if (p.guardado) { %>
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.72rem;">
+                                                            <i class="bi bi-check-circle-fill me-1"></i> Registrado (<%= p.cantidad_asistentes %>)
+                                                        </span>
+                                                    <% } else { %>
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1" style="font-size: 0.72rem;">
+                                                            <i class="bi bi-clock me-1"></i> Pendiente
+                                                        </span>
+                                                    <% } %>
+                                                </span>
+                                            </div>
+                                            <% if (p.puesto_descripcion) { %>
+                                                <small class="text-muted d-block mt-1" style="font-size: 0.75rem;"><%= p.puesto_descripcion %></small>
+                                            <% } %>
+                                            <% if (p.registrado_por) { %>
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">
+                                                    <i class="bi bi-person me-1"></i> Por: <%= p.registrado_por %>
+                                                </small>
+                                            <% } %>
+                                        </div>
+
+                                        <!-- Cantidad de Asistentes -->
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label text-muted small d-md-none mb-1">Cantidad de Personas:</label>
+                                            <div class="input-group">
+                                                <span class="input-group-text bg-light text-muted">
+                                                    <i class="bi bi-people"></i>
+                                                </span>
+                                                <input type="number" 
+                                                       class="form-control input-cantidad fw-bold text-center fs-5 <%= !p.editable ? 'bg-light text-muted' : '' %>" 
+                                                       name="puestos[<%= p.key %>][cantidad]" 
+                                                       value="<%= p.cantidad_asistentes %>" 
+                                                       min="0" 
+                                                       max="500" 
+                                                       step="1"
+                                                       placeholder=""
+                                                       data-key="<%= p.key %>"
+                                                       <%= !p.editable ? 'readonly' : '' %>>
+                                            </div>
+                                            <input type="hidden" name="puestos[<%= p.key %>][id_puesto]" value="<%= p.id_puesto %>">
+                                            <input type="hidden" name="puestos[<%= p.key %>][turno]" value="<%= p.turno %>">
+                                        </div>
+
+                                        <!-- Observaciones -->
+                                        <div class="col-6 col-md-4">
+                                            <label class="form-label text-muted small d-md-none mb-1">Notas / Observaciones:</label>
+                                            <input type="text" 
+                                                   class="form-control form-control-sm text-secondary <%= !p.editable ? 'bg-light' : '' %>" 
+                                                   name="puestos[<%= p.key %>][observaciones]" 
+                                                   value="<%= p.observaciones %>" 
+                                                   placeholder="Observación opcional..." 
+                                                   maxlength="500"
+                                                   <%= !p.editable ? 'readonly' : '' %>>
+                                        </div>
+                                    </div>
+                                </div>
+                            <% }); %>
+                        </div>
+
+                        <!-- Barra de Acciones Inferior Fija / Destacada -->
+                        <div class="card-footer bg-white p-3 p-md-4 border-top d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3">
+                            <div class="text-muted small">
+                                <i class="bi bi-info-circle me-1 text-primary"></i> 
+                                Ingresa la cantidad de personas asistentes. Deja en blanco los puestos que registrarás más tarde.
+                            </div>
+                            <div class="d-flex gap-2 w-100 w-sm-auto justify-content-end">
+                                <button type="submit" class="btn btn-primary px-4 py-2 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2" id="btnGuardar">
+                                    <i class="bi bi-save-fill"></i>
+                                    <span>Guardar Asistencia</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                <% } else { %>
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                        No hay puestos activos registrados en esta área.
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    <% } %>
+<% } else { %>
+    <div class="card shadow-sm border-0 py-5 text-center text-muted">
+        <i class="bi bi-building-check fs-1 text-secondary mb-2"></i>
+        <h5 class="fw-bold text-dark">Selecciona un Área para Comenzar</h5>
+        <p class="small text-muted mb-0">Elige una de tus áreas asignadas en el selector superior para capturar la asistencia del día.</p>
+    </div>
+<% } %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const inputsCantidad = document.querySelectorAll('.input-cantidad');
+    const totalDisplay = document.getElementById('totalAsistentesCalculado');
+    const formGuardar = document.getElementById('formGuardarAsistencias');
+
+    function recalcularTotal() {
+        if (!totalDisplay) return;
+        let sum = 0;
+        inputsCantidad.forEach(input => {
+            const val = parseInt(input.value, 10);
+            if (!isNaN(val) && val > 0) {
+                sum += val;
+            }
+        });
+        totalDisplay.textContent = sum;
+    }
+
+    inputsCantidad.forEach(input => {
+        input.addEventListener('input', recalcularTotal);
+    });
+
+    if (formGuardar) {
+        formGuardar.addEventListener('submit', (e) => {
+            let algunValor = false;
+            inputsCantidad.forEach(inp => {
+                if (!inp.readOnly && inp.value.trim() !== '') {
+                    algunValor = true;
+                }
+            });
+
+            if (!algunValor) {
+                e.preventDefault();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: 'Sin datos a guardar',
+                        text: 'No has ingresado la cantidad de personas en ningún puesto pendiente. Ingresa los valores en los puestos que deseas guardar ahora.',
+                        icon: 'info',
+                        confirmButtonColor: '#860063'
+                    });
+                } else {
+                    alert('No has ingresado la cantidad de personas en ningún puesto pendiente.');
+                }
+            }
+        });
+    }
+
+    recalcularTotal();
+});
+</script>

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usuarios y Permisos | Registro de Asistencia</title>
+    <!-- Metadatos PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#860063">
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body class="bg-light">
+    <div class="app-wrapper d-flex">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebarMenu"></aside>
+
+        <!-- Main Content Area -->
+        <div class="main-wrapper flex-grow-1 d-flex flex-column min-vh-100 overflow-hidden">
+            <!-- Navbar -->
+            <nav id="appNavbar"></nav>
+
+            <!-- Main Body -->
+            <main class="flex-grow-1 p-3 p-md-4 overflow-auto">
+                <div class="container-fluid p-0">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                        <div>
+                            <h2 class="fw-bold mb-1 text-dark">Gestión de Usuarios y Permisos</h2>
+                            <p class="text-muted mb-0">Administra el acceso de registradores, supervisores y define qué áreas puede ver cada uno.</p>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm" id="btnNuevoUsuario">
+                                <i class="bi bi-person-plus-fill"></i>
+                                <span>Nuevo Usuario</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de Usuarios -->
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-4">Usuario / Nombre</th>
+                                            <th>Correo Electrónico</th>
+                                            <th>Rol del Sistema</th>
+                                            <th>Áreas Asignadas (Permisos)</th>
+                                            <th class="text-center">Estado</th>
+                                            <th class="pe-4 text-end">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbodyUsuarios">
+                                        <tr>
+                                            <td colspan="6" class="text-center py-5 text-muted">
+                                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                                Cargando usuarios...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Footer -->
+            <footer id="appFooter"></footer>
+        </div>
+    </div>
+
+    <!-- Modal Formulario Usuario (Crear y Editar) -->
+    <div class="modal fade" id="modalUsuario" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content border-0 shadow">
+                <form id="formUsuario">
+                    <input type="hidden" id="usr_id">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title fw-bold" id="modalUsuarioTitle"><i class="bi bi-person-badge me-1"></i> Usuario</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="row g-4">
+                            <!-- Datos de la Cuenta -->
+                            <div class="col-lg-5">
+                                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">Datos de Acceso</h6>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold small">Nombre Completo <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="usr_nombre" required placeholder="Ej. Roberto Sánchez">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold small">Nombre de Usuario <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light text-muted">@</span>
+                                        <input type="text" class="form-control" id="usr_usuario" required placeholder="ej. rsanchez">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold small">Correo Electrónico <span class="text-danger">*</span></label>
+                                    <input type="email" class="form-control" id="usr_email" required placeholder="usuario@empresa.com">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold small" id="usr_password_label">Contraseña <span class="text-danger">*</span></label>
+                                    <input type="password" class="form-control" id="usr_password" placeholder="Mínimo 6 caracteres" minlength="6">
+                                    <small class="text-muted d-none" id="usr_password_help">Dejar en blanco si no deseas cambiarla.</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold small">Puesto / Cargo en la Empresa</label>
+                                    <input type="text" class="form-control" id="usr_cargo" placeholder="Ej. Supervisor de Planta">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold small">Rol del Sistema <span class="text-danger">*</span></label>
+                                    <select class="form-select" id="usr_id_rol" required></select>
+                                </div>
+                                <div class="form-check form-switch mt-3 d-none" id="divUsrActivo">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="usr_activo" checked>
+                                    <label class="form-check-label fw-semibold" for="usr_activo">Usuario Activo</label>
+                                </div>
+                            </div>
+
+                            <!-- Asignación de Áreas y Ubicaciones -->
+                            <div class="col-lg-7">
+                                <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                                    <h6 class="fw-bold text-dark mb-0">Áreas y Ubicaciones Autorizadas</h6>
+                                    <button type="button" class="btn btn-outline-primary btn-sm py-0" id="btnToggleAllAreas">Marcar Todas</button>
+                                </div>
+
+                                <div id="adminNoticeUsr" class="alert alert-info d-none mb-3">
+                                    <i class="bi bi-info-circle-fill me-1"></i>
+                                    <strong>Rol Administrador:</strong> Este usuario tiene acceso total automático a todas las áreas y ubicaciones.
+                                </div>
+
+                                <div id="areasContainerUsr" class="border rounded-3 p-3 overflow-auto" style="max-height: 380px;">
+                                    <div class="text-muted small text-center py-4">Cargando catálogo de áreas...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary fw-semibold" id="btnGuardarUsuario">
+                            <i class="bi bi-save me-1"></i> Guardar Usuario
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle & App Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            initAppLayout('usuarios');
+
+            const tbody = document.getElementById('tbodyUsuarios');
+            const modalUsuarioEl = document.getElementById('modalUsuario');
+            const modalUsuario = new bootstrap.Modal(modalUsuarioEl);
+            const btnNuevo = document.getElementById('btnNuevoUsuario');
+
+            let rolesCatalog = [];
+            let areasCatalog = [];
+
+            async function cargarUsuarios() {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                            Cargando usuarios...
+                        </td>
+                    </tr>
+                `;
+
+                try {
+                    const res = await api.get('/usuarios');
+                    if (!res.success) return;
+
+                    const users = res.usuarios || [];
+                    const currentLogged = Auth.getUser();
+
+                    tbody.innerHTML = users.map(u => {
+                        const isSelf = currentLogged && currentLogged.id_usuario === u.id_usuario;
+                        const initial = (u.nombre || 'U').charAt(0).toUpperCase();
+
+                        let areasBadge = '';
+                        if (u.rol_codigo === 'ADMIN') {
+                            areasBadge = `<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-all me-1"></i> Acceso Total</span>`;
+                        } else if (u.areas_asignadas) {
+                            areasBadge = `<div class="small fw-semibold text-dark">${u.areas_asignadas}</div>`;
+                            if (u.ubicaciones_asignadas) {
+                                areasBadge += `<div class="small text-muted mt-1"><i class="bi bi-geo-alt-fill text-warning me-1"></i><span class="text-secondary">${u.ubicaciones_asignadas}</span></div>`;
+                            }
+                        } else {
+                            areasBadge = `<span class="badge bg-warning-subtle text-warning border border-warning-subtle"><i class="bi bi-exclamation-circle me-1"></i> Sin áreas</span>`;
+                        }
+
+                        return `
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="bg-primary-subtle text-primary fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px; font-size: 0.9rem;">
+                                            ${initial}
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold text-dark">${u.nombre} <span class="badge bg-light text-primary border ms-1">@${u.usuario}</span></div>
+                                            <small class="text-muted">${u.cargo || 'Sin cargo especificado'}</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="text-secondary"><i class="bi bi-envelope me-1"></i> ${u.email}</span></td>
+                                <td>
+                                    <span class="badge ${u.rol_codigo === 'ADMIN' ? 'bg-danger' : (u.rol_codigo === 'CONSULTOR' ? 'bg-info text-dark' : 'bg-primary')}">
+                                        ${u.rol_nombre}
+                                    </span>
+                                </td>
+                                <td>${areasBadge}</td>
+                                <td class="text-center">
+                                    ${u.activo 
+                                        ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>' 
+                                        : '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Inactivo</span>'}
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary btn-edit-usr" data-id="${u.id_usuario}" title="Editar usuario">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        ${!isSelf ? `
+                                            <button type="button" class="btn btn-outline-${u.activo ? 'warning' : 'success'} btn-toggle-usr" data-id="${u.id_usuario}" data-activo="${u.activo ? '1' : '0'}" title="${u.activo ? 'Desactivar' : 'Activar'}">
+                                                <i class="bi bi-${u.activo ? 'person-x' : 'person-check'}"></i>
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    // Vincular acciones
+                    document.querySelectorAll('.btn-edit-usr').forEach(b => {
+                        b.addEventListener('click', () => abrirModalUsuario(b.getAttribute('data-id')));
+                    });
+
+                    document.querySelectorAll('.btn-toggle-usr').forEach(b => {
+                        b.addEventListener('click', () => {
+                            const uId = b.getAttribute('data-id');
+                            const act = b.getAttribute('data-activo') === '1';
+                            Swal.fire({
+                                title: 'Confirmación',
+                                text: `¿Desea ${act ? 'desactivar' : 'activar'} a este usuario?`,
+                                icon: 'question',
+                                showCancelButton: true,
+                                confirmButtonColor: '#860063',
+                                confirmButtonText: 'Sí, cambiar',
+                                cancelButtonText: 'Cancelar'
+                            }).then(async r => {
+                                if (r.isConfirmed) {
+                                    try {
+                                        const resT = await api.post(`/usuarios/toggle/${uId}`);
+                                        if (resT.success) {
+                                            showToast('success', resT.message);
+                                            cargarUsuarios();
+                                        }
+                                    } catch (err) {
+                                        Swal.fire('Error', err.message, 'error');
+                                    }
+                                }
+                            });
+                        });
+                    });
+                } catch (err) {
+                    console.error('Error cargando usuarios:', err);
+                    showToast('error', 'Error al cargar usuarios');
+                }
+            }
+
+            async function abrirModalUsuario(id = null) {
+                document.getElementById('formUsuario').reset();
+                document.getElementById('usr_id').value = id || '';
+
+                const title = document.getElementById('modalUsuarioTitle');
+                const pwdLabel = document.getElementById('usr_password_label');
+                const pwdHelp = document.getElementById('usr_password_help');
+                const divActivo = document.getElementById('divUsrActivo');
+                const pwdInput = document.getElementById('usr_password');
+
+                if (id) {
+                    title.innerHTML = '<i class="bi bi-pencil-square me-1"></i> Editar Usuario';
+                    pwdLabel.innerHTML = 'Contraseña (Opcional)';
+                    pwdInput.required = false;
+                    pwdHelp.classList.remove('d-none');
+                    divActivo.classList.remove('d-none');
+                } else {
+                    title.innerHTML = '<i class="bi bi-person-plus-fill me-1"></i> Registrar Nuevo Usuario';
+                    pwdLabel.innerHTML = 'Contraseña Inicial <span class="text-danger">*</span>';
+                    pwdInput.required = true;
+                    pwdHelp.classList.add('d-none');
+                    divActivo.classList.add('d-none');
+                }
+
+                try {
+                    const endpoint = id ? `/usuarios/form-data/${id}` : '/usuarios/form-data';
+                    const res = await api.get(endpoint);
+                    if (!res.success) return;
+
+                    rolesCatalog = res.roles || [];
+                    areasCatalog = res.areas || [];
+                    const assignedAreas = res.assignedAreaIds || [];
+                    const assignedUbicaciones = res.assignedLocationIds || [];
+
+                    // Poblar selector de roles
+                    const selRol = document.getElementById('usr_id_rol');
+                    selRol.innerHTML = rolesCatalog.map(r => `
+                        <option value="${r.id_rol}" data-codigo="${r.codigo}" ${res.user && res.user.id_rol === r.id_rol ? 'selected' : (r.codigo === 'SUPERVISOR' && !res.user ? 'selected' : '')}>
+                            ${r.nombre} (${r.codigo})
+                        </option>
+                    `).join('');
+
+                    if (res.user) {
+                        document.getElementById('usr_nombre').value = res.user.nombre || '';
+                        document.getElementById('usr_usuario').value = res.user.usuario || '';
+                        document.getElementById('usr_email').value = res.user.email || '';
+                        document.getElementById('usr_cargo').value = res.user.cargo || '';
+                        document.getElementById('usr_activo').checked = Boolean(res.user.activo);
+                    }
+
+                    // Renderizar lista de áreas y ubicaciones
+                    renderAreasCheckboxes(assignedAreas, assignedUbicaciones);
+
+                    actualizarVisibilidadPorRol();
+                    modalUsuario.show();
+                } catch (err) {
+                    Swal.fire('Error', err.message, 'error');
+                }
+            }
+
+            function renderAreasCheckboxes(assignedAreas = [], assignedUbicaciones = []) {
+                const container = document.getElementById('areasContainerUsr');
+                if (areasCatalog.length === 0) {
+                    container.innerHTML = '<div class="text-muted small">No hay áreas activas registradas en el catálogo.</div>';
+                    return;
+                }
+
+                container.innerHTML = areasCatalog.map(area => {
+                    const isAreaChecked = assignedAreas.includes(area.id_area);
+                    const ubs = area.ubicaciones || [];
+
+                    return `
+                        <div class="card mb-2 border rounded-3 p-2 bg-light-subtle">
+                            <div class="form-check">
+                                <input class="form-check-input check-area" type="checkbox" value="${area.id_area}" id="chk_area_${area.id_area}" ${isAreaChecked ? 'checked' : ''}>
+                                <label class="form-check-label fw-bold text-dark small" for="chk_area_${area.id_area}">
+                                    ${area.nombre} (${area.codigo})
+                                </label>
+                            </div>
+                            ${ubs.length > 0 ? `
+                                <div class="ms-4 mt-2 border-start ps-3 pt-1">
+                                    <small class="text-muted d-block mb-1" style="font-size: 0.72rem;">Ubicaciones autorizadas:</small>
+                                    ${ubs.map(u => `
+                                        <div class="form-check form-check-inline mb-1">
+                                            <input class="form-check-input check-ub" type="checkbox" value="${u.id_ubicacion}" data-area="${area.id_area}" id="chk_ub_${u.id_ubicacion}" ${assignedUbicaciones.includes(u.id_ubicacion) ? 'checked' : ''}>
+                                            <label class="form-check-label small" for="chk_ub_${u.id_ubicacion}">
+                                                <i class="bi bi-geo-alt-fill text-warning me-1"></i>${u.nombre}
+                                            </label>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            function actualizarVisibilidadPorRol() {
+                const selRol = document.getElementById('usr_id_rol');
+                const opt = selRol.options[selRol.selectedIndex];
+                const codigo = opt ? opt.getAttribute('data-codigo') : '';
+                const notice = document.getElementById('adminNoticeUsr');
+                const areasContainer = document.getElementById('areasContainerUsr');
+
+                if (codigo === 'ADMIN') {
+                    notice.classList.remove('d-none');
+                    notice.className = 'alert alert-info d-block mb-3';
+                    notice.innerHTML = '<i class="bi bi-info-circle-fill me-1"></i><strong>Rol Administrador:</strong> Acceso total automático a todas las áreas, configuraciones y reportes.';
+                    areasContainer.classList.add('opacity-50');
+                } else if (codigo === 'CONSULTOR') {
+                    notice.classList.remove('d-none');
+                    notice.className = 'alert alert-warning d-block mb-3';
+                    notice.innerHTML = '<i class="bi bi-eye-fill me-1"></i><strong>Usuario de Solo Vista:</strong> Podrá consultar reportes e historial únicamente de las áreas seleccionadas abajo. No podrá registrar, editar ni eliminar.';
+                    areasContainer.classList.remove('opacity-50');
+                } else {
+                    notice.classList.add('d-none');
+                    areasContainer.classList.remove('opacity-50');
+                }
+            }
+
+            document.getElementById('usr_id_rol').addEventListener('change', actualizarVisibilidadPorRol);
+
+            document.getElementById('btnToggleAllAreas').addEventListener('click', () => {
+                const checks = document.querySelectorAll('.check-area, .check-ub');
+                const anyUnchecked = Array.from(checks).some(c => !c.checked);
+                checks.forEach(c => c.checked = anyUnchecked);
+            });
+
+            btnNuevo.addEventListener('click', () => abrirModalUsuario(null));
+
+            // Enviar Formulario Usuario
+            document.getElementById('formUsuario').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const id = document.getElementById('usr_id').value;
+                const nombre = document.getElementById('usr_nombre').value.trim();
+                const usuario = document.getElementById('usr_usuario').value.trim();
+                const email = document.getElementById('usr_email').value.trim();
+                const password = document.getElementById('usr_password').value;
+                const cargo = document.getElementById('usr_cargo').value.trim();
+                const id_rol = document.getElementById('usr_id_rol').value;
+                const activo = document.getElementById('usr_activo').checked;
+
+                const areas = Array.from(document.querySelectorAll('.check-area:checked')).map(c => parseInt(c.value, 10));
+                const ubicaciones = Array.from(document.querySelectorAll('.check-ub:checked')).map(c => parseInt(c.value, 10));
+
+                const payload = {
+                    nombre,
+                    usuario,
+                    email,
+                    password: password || undefined,
+                    cargo,
+                    id_rol,
+                    activo,
+                    areas,
+                    ubicaciones
+                };
+
+                try {
+                    const res = id 
+                        ? await api.post(`/usuarios/editar/${id}`, payload)
+                        : await api.post('/usuarios/nuevo', payload);
+
+                    if (res.success) {
+                        modalUsuario.hide();
+                        showToast('success', res.message);
+                        cargarUsuarios();
+                    }
+                } catch (err) {
+                    Swal.fire('Error', err.message, 'error');
+                }
+            });
+
+            cargarUsuarios();
+        });
+    </script>
+</body>
+</html>

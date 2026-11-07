@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cargando... | Registro de Asistencia</title>
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (Auth.isAuthenticated()) {
+                const user = Auth.getUser();
+                if (user && user.rol_codigo === 'ADMIN') {
+                    window.location.replace('/dashboard.html');
+                } else {
+                    window.location.replace('/asistencias-registro.html');
+                }
+            } else {
+                window.location.replace('/login.html');
+            }
+        });
+    </script>
+</head>
+<body style="background-color: #f8f9fa; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; color: #860063;">
+    <div style="text-align: center;">
+        <h3 style="font-weight: bold;">Registro de Asistencia</h3>
+        <p style="color: #6c757d;">Cargando sistema...</p>
+    </div>
+</body>
+</html>

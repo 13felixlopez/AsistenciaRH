@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportes y Estadísticas | Registro de Asistencia</title>
+    <!-- Metadatos PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#860063">
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SweetAlert2 & Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body class="bg-light">
+    <div class="app-wrapper d-flex">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebarMenu"></aside>
+
+        <!-- Main Content Area -->
+        <div class="main-wrapper flex-grow-1 d-flex flex-column min-vh-100 overflow-hidden">
+            <!-- Navbar -->
+            <nav id="appNavbar"></nav>
+
+            <!-- Main Body -->
+            <main class="flex-grow-1 p-3 p-md-4 overflow-auto">
+                <div class="container-fluid p-0">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+                        <div>
+                            <h2 class="fw-bold mb-1 text-dark">Centro de Reportes Estadísticos</h2>
+                            <p class="text-muted mb-0">Análisis cuantitativo de personal por puesto, ubicación, área y tendencias temporales.</p>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" id="btnExportarExcel" class="btn btn-success d-flex align-items-center gap-2 shadow-sm">
+                                <i class="bi bi-file-earmark-excel-fill"></i>
+                                <span>Exportar a Excel</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-dark d-flex align-items-center gap-2" onclick="window.print()">
+                                <i class="bi bi-printer"></i>
+                                <span class="d-none d-sm-inline">Imprimir / PDF</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filtros de Reporte y Pestañas -->
+                    <div class="card shadow-sm border-0 mb-4 no-print">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <div class="nav nav-pills card-header-pills" id="reportTabs">
+                                <button type="button" class="nav-link active" data-tipo="detalle_puesto">
+                                    <i class="bi bi-people-fill me-1"></i> Asistencia por Puestos & Tendencias
+                                </button>
+                                <button type="button" class="nav-link" data-tipo="resumen_area">
+                                    <i class="bi bi-pie-chart me-1"></i> Resumen & Evolución por Área
+                                </button>
+                                <button type="button" class="nav-link" data-tipo="diario">
+                                    <i class="bi bi-calendar-day me-1"></i> Reporte Diario Consolidado
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="card-body p-4">
+                            <form id="formReportes" class="row g-3 align-items-end">
+                                <!-- Fechas de rango -->
+                                <div class="col-md-2" id="divFechaInicio">
+                                    <label for="fechaInicio" class="form-label fw-semibold text-secondary small">
+                                        <i class="bi bi-calendar-plus me-1"></i> Fecha Inicial:
+                                    </label>
+                                    <input type="date" class="form-control" id="fechaInicio">
+                                </div>
+                                <div class="col-md-2" id="divFechaFin">
+                                    <label for="fechaFin" class="form-label fw-semibold text-secondary small">
+                                        <i class="bi bi-calendar-check me-1"></i> Fecha Final:
+                                    </label>
+                                    <input type="date" class="form-control" id="fechaFin">
+                                </div>
+
+                                <!-- Fecha única para Diario -->
+                                <div class="col-md-3 d-none" id="divFechaDiario">
+                                    <label for="fechaDiario" class="form-label fw-semibold text-secondary small">
+                                        <i class="bi bi-calendar-event me-1"></i> Fecha Específica:
+                                    </label>
+                                    <input type="date" class="form-control" id="fechaDiario">
+                                </div>
+
+                                <!-- Selector de Área -->
+                                <div class="col-md-3">
+                                    <label for="selectAreaReporte" class="form-label fw-semibold text-secondary small">
+                                        <i class="bi bi-building me-1"></i> Área Operativa:
+                                    </label>
+                                    <select id="selectAreaReporte" class="form-select">
+                                        <option value="">-- Todas mis Áreas --</option>
+                                    </select>
+                                </div>
+
+                                <!-- Selector de Ubicación -->
+                                <div class="col-md-2">
+                                    <label for="selectUbicacionReporte" class="form-label fw-semibold text-secondary small">
+                                        <i class="bi bi-geo-alt-fill me-1 text-warning"></i> Ubicación / Patio:
+                                    </label>
+                                    <select id="selectUbicacionReporte" class="form-select" disabled>
+                                        <option value="">-- Todas las Ubicaciones --</option>
+                                    </select>
+                                </div>
+
+                                <!-- Selector de Puesto de Trabajo -->
+                                <div class="col-md-2" id="divPuestoWrapper">
+                                    <label for="selectPuestoReporte" class="form-label fw-semibold text-secondary small">
+                                        <i class="bi bi-person-workspace me-1 text-primary"></i> Puesto:
+                                    </label>
+                                    <select id="selectPuestoReporte" class="form-select" disabled>
+                                        <option value="">-- Todos los Puestos --</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-1">
+                                    <button type="submit" class="btn btn-primary w-100 fw-semibold" title="Aplicar Filtros">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Resumen Estadístico de Reportes -->
+                    <div class="row g-3 mb-4" id="statsReporteRow">
+                        <div class="col-sm-6 col-lg-4">
+                            <div class="card shadow-sm border-0 stat-card">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Total Asistencias</span>
+                                        <h3 class="fw-bold my-1 text-dark" id="statReporteTotal">-</h3>
+                                        <small class="text-primary"><i class="bi bi-people-fill me-1"></i> Personas en el periodo</small>
+                                    </div>
+                                    <div class="stat-icon bg-primary-subtle text-primary">
+                                        <i class="bi bi-person-check-fill"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-4">
+                            <div class="card shadow-sm border-0 stat-card stat-success">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Promedio Diario</span>
+                                        <h3 class="fw-bold my-1 text-dark" id="statReportePromedio">-</h3>
+                                        <small class="text-success"><i class="bi bi-calculator me-1"></i> Asistentes por día</small>
+                                    </div>
+                                    <div class="stat-icon bg-success-subtle text-success">
+                                        <i class="bi bi-graph-up-arrow"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-12 col-lg-4">
+                            <div class="card shadow-sm border-0 stat-card stat-warning">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Puestos / Áreas Evaluados</span>
+                                        <h3 class="fw-bold my-1 text-dark" id="statReportePuestos">-</h3>
+                                        <small class="text-warning"><i class="bi bi-briefcase me-1"></i> Con registros activos</small>
+                                    </div>
+                                    <div class="stat-icon bg-warning-subtle text-warning">
+                                        <i class="bi bi-card-checklist"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfica de Tendencia -->
+                    <div class="card shadow-sm border-0 mb-4" id="cardReporteGrafica">
+                        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                            <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-bar-chart-line-fill text-primary me-2"></i> Gráfico Estadístico de Tendencia</h5>
+                            <span class="badge bg-light text-muted border">Comportamiento Gráfico</span>
+                        </div>
+                        <div class="card-body p-3">
+                            <div style="position: relative; height: 320px;" id="chartWrapper">
+                                <canvas id="chartReportes"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de Resultados Detallados -->
+                    <div class="card shadow-sm border-0 mb-5">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <h5 class="fw-bold mb-0 text-dark" id="tablaReporteTitulo"><i class="bi bi-table me-2 text-primary"></i> Detalle de Resultados</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive" id="tablaReporteContainer">
+                                <div class="p-5 text-center text-muted">
+                                    <div class="spinner-border text-primary spinner-border-sm me-2" role="status"></div>
+                                    Cargando datos del reporte...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Footer -->
+            <footer id="appFooter"></footer>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle & App Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            initAppLayout('reportes');
+
+            let currentTipo = 'detalle_puesto';
+            let chartInstance = null;
+
+            const hoy = new Date();
+            const dosSemanasAtras = new Date();
+            dosSemanasAtras.setDate(hoy.getDate() - 14);
+
+            const fechaInicioInput = document.getElementById('fechaInicio');
+            const fechaFinInput = document.getElementById('fechaFin');
+            const fechaDiarioInput = document.getElementById('fechaDiario');
+            const divFechaInicio = document.getElementById('divFechaInicio');
+            const divFechaFin = document.getElementById('divFechaFin');
+            const divFechaDiario = document.getElementById('divFechaDiario');
+            const divPuestoWrapper = document.getElementById('divPuestoWrapper');
+
+            const selectArea = document.getElementById('selectAreaReporte');
+            const selectUbicacion = document.getElementById('selectUbicacionReporte');
+            const selectPuesto = document.getElementById('selectPuestoReporte');
+            const formReportes = document.getElementById('formReportes');
+            const btnExportarExcel = document.getElementById('btnExportarExcel');
+
+            fechaInicioInput.value = dosSemanasAtras.toISOString().split('T')[0];
+            fechaFinInput.value = hoy.toISOString().split('T')[0];
+            fechaDiarioInput.value = hoy.toISOString().split('T')[0];
+
+            // Cambio de Pestañas
+            const tabs = document.querySelectorAll('#reportTabs button');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    currentTipo = tab.getAttribute('data-tipo');
+
+                    if (currentTipo === 'diario') {
+                        divFechaInicio.classList.add('d-none');
+                        divFechaFin.classList.add('d-none');
+                        divFechaDiario.classList.remove('d-none');
+                        divPuestoWrapper.classList.remove('d-none');
+                    } else if (currentTipo === 'resumen_area') {
+                        divFechaInicio.classList.remove('d-none');
+                        divFechaFin.classList.remove('d-none');
+                        divFechaDiario.classList.add('d-none');
+                        divPuestoWrapper.classList.add('d-none');
+                    } else {
+                        divFechaInicio.classList.remove('d-none');
+                        divFechaFin.classList.remove('d-none');
+                        divFechaDiario.classList.add('d-none');
+                        divPuestoWrapper.classList.remove('d-none');
+                    }
+
+                    cargarReporte();
+                });
+            });
+
+            async function cargarReporte() {
+                const fInicio = fechaInicioInput.value;
+                const fFin = fechaFinInput.value;
+                const fDiario = fechaDiarioInput.value;
+                const aId = selectArea.value;
+                const uId = selectUbicacion.value;
+                const pId = selectPuesto.value;
+
+                let endpoint = `/reportes?tipo=${currentTipo}&fechaInicio=${fInicio}&fechaFin=${fFin}&fechaDiario=${fDiario}`;
+                if (aId) endpoint += `&areaId=${aId}`;
+                if (uId) endpoint += `&ubicacionId=${uId}`;
+                if (pId && currentTipo !== 'resumen_area') endpoint += `&puestoId=${pId}`;
+
+                try {
+                    const res = await api.get(endpoint);
+                    if (!res.success || !res.data) return;
+
+                    const data = res.data;
+
+                    // Poblar selector de áreas si está vacío
+                    if (selectArea.options.length <= 1 && data.areas) {
+                        if (data.areas.length === 1) {
+                            selectArea.innerHTML = data.areas.map(a => `
+                                <option value="${a.id_area}" selected>
+                                    ${a.nombre}
+                                </option>
+                            `).join('');
+                        } else {
+                            selectArea.innerHTML = '<option value="">-- Todas mis Áreas --</option>' + 
+                                data.areas.map(a => `
+                                    <option value="${a.id_area}" ${aId == a.id_area ? 'selected' : ''}>
+                                        ${a.nombre}
+                                    </option>
+                                `).join('');
+                        }
+                    }
+
+                    // Poblar selector de ubicaciones
+                    if (data.ubicacionesFiltro && data.ubicacionesFiltro.length > 0) {
+                        selectUbicacion.disabled = false;
+                        selectUbicacion.innerHTML = '<option value="">-- Todas las Ubicaciones --</option>' + 
+                            data.ubicacionesFiltro.map(u => `
+                                <option value="${u.id_ubicacion}" ${uId == u.id_ubicacion ? 'selected' : ''}>
+                                    ${u.nombre}
+                                </option>
+                            `).join('');
+                    } else {
+                        selectUbicacion.disabled = true;
+                        selectUbicacion.innerHTML = '<option value="">-- Todas las Ubicaciones --</option>';
+                    }
+
+                    // Poblar selector de puestos
+                    if (data.puestosFiltro && data.puestosFiltro.length > 0 && currentTipo !== 'resumen_area') {
+                        selectPuesto.disabled = false;
+                        selectPuesto.innerHTML = '<option value="">-- Todos los Puestos --</option>' + 
+                            data.puestosFiltro.map(p => `
+                                <option value="${p.id_puesto}" ${pId == p.id_puesto ? 'selected' : ''}>
+                                    ${p.nombre}
+                                </option>
+                            `).join('');
+                    } else {
+                        selectPuesto.disabled = true;
+                        selectPuesto.innerHTML = '<option value="">-- Todos los Puestos --</option>';
+                    }
+
+                    // Actualizar Tarjetas KPI
+                    document.getElementById('statReporteTotal').textContent = `${data.totales ? data.totales.personas : 0} pers.`;
+                    document.getElementById('statReportePromedio').textContent = `${data.totales ? data.totales.promedioDiario : 0} pers/día`;
+                    document.getElementById('statReportePuestos').textContent = `${data.totales ? data.totales.totalPuestos : 0}`;
+
+                    // Renderizar Gráfica Chart.js
+                    renderGrafica(data);
+
+                    // Renderizar Tabla
+                    renderTabla(data);
+                } catch (err) {
+                    console.error('Error cargando reporte:', err);
+                    showToast('error', 'Error al cargar reporte');
+                }
+            }
+
+            function renderGrafica(data) {
+                const chartWrapper = document.getElementById('chartWrapper');
+                const canvas = document.getElementById('chartReportes');
+                const cardGrafica = document.getElementById('cardReporteGrafica');
+
+                if (chartInstance) {
+                    chartInstance.destroy();
+                    chartInstance = null;
+                }
+
+                let chartConfigData = null;
+                if (currentTipo === 'detalle_puesto' && data.chartDataPuestos && data.chartDataPuestos.datasets && data.chartDataPuestos.datasets.length > 0) {
+                    chartConfigData = data.chartDataPuestos;
+                } else if (data.chartData && data.chartData.datasets && data.chartData.datasets.length > 0) {
+                    chartConfigData = data.chartData;
+                }
+
+                if (!chartConfigData || !chartConfigData.datasets || chartConfigData.datasets.length === 0) {
+                    cardGrafica.classList.add('d-none');
+                    return;
+                }
+
+                cardGrafica.classList.remove('d-none');
+                chartInstance = new Chart(canvas, {
+                    type: currentTipo === 'diario' ? 'bar' : 'line',
+                    data: chartConfigData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            y: { beginAtZero: true }
+                        }
+                    }
+                });
+            }
+
+            function renderTabla(data) {
+                const container = document.getElementById('tablaReporteContainer');
+                const items = data.data || [];
+
+                if (items.length === 0) {
+                    container.innerHTML = `
+                        <div class="p-5 text-center text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                            No hay registros disponibles para los filtros seleccionados.
+                        </div>
+                    `;
+                    return;
+                }
+
+                if (currentTipo === 'resumen_area') {
+                    container.innerHTML = `
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Área Operativa</th>
+                                    <th class="text-center">Total Puestos</th>
+                                    <th class="text-center">Días con Registros</th>
+                                    <th class="text-center">Total Asistencias</th>
+                                    <th class="pe-4 text-end">Promedio por Puesto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(item => `
+                                    <tr>
+                                        <td class="ps-4 fw-bold text-dark">
+                                            <i class="bi bi-building me-1 text-primary"></i> ${item.area_nombre} (${item.area_codigo})
+                                        </td>
+                                        <td class="text-center">${item.total_puestos}</td>
+                                        <td class="text-center"><span class="badge bg-light text-dark border">${item.dias_con_registro} días</span></td>
+                                        <td class="text-center"><span class="badge bg-success px-3 py-2 fs-6">${item.total_asistencias} pers.</span></td>
+                                        <td class="pe-4 text-end text-muted">${Number(item.promedio_por_puesto).toFixed(1)} pers.</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else if (currentTipo === 'diario') {
+                    container.innerHTML = `
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Área</th>
+                                    <th>Ubicación</th>
+                                    <th>Puesto</th>
+                                    <th>Turno</th>
+                                    <th class="text-center">Asistentes</th>
+                                    <th>Registrado Por</th>
+                                    <th class="pe-4 text-end">Hora Registro</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(item => `
+                                    <tr>
+                                        <td class="ps-4 fw-bold text-dark">${item.area_nombre}</td>
+                                        <td>${item.ubicacion_nombre ? `<span class="badge bg-warning-subtle text-dark border border-warning-subtle small">${item.ubicacion_nombre}</span>` : '<span class="text-muted small">General</span>'}</td>
+                                        <td class="fw-semibold text-secondary">${item.puesto_nombre}</td>
+                                        <td><span class="badge bg-light text-dark border">${item.turno}</span></td>
+                                        <td class="text-center"><span class="badge bg-success px-3 py-2 fs-6">${item.cantidad_asistentes} pers.</span></td>
+                                        <td class="small text-muted"><i class="bi bi-person me-1"></i>${item.usuario_registro || '-'}</td>
+                                        <td class="pe-4 text-end small text-muted"><i class="bi bi-clock me-1"></i>${item.hora_registro_texto || '-'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    // Detalle por puesto
+                    container.innerHTML = `
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Área</th>
+                                    <th>Puesto de Trabajo</th>
+                                    <th>Turno</th>
+                                    <th class="text-center">Días Registrados</th>
+                                    <th class="text-center">Total Asistencias</th>
+                                    <th class="pe-4 text-end">Promedio Diario</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(item => `
+                                    <tr>
+                                        <td class="ps-4 fw-semibold text-dark">${item.area_nombre}</td>
+                                        <td class="fw-bold text-secondary">${item.puesto_nombre}</td>
+                                        <td><span class="badge bg-light text-dark border">${item.turno}</span></td>
+                                        <td class="text-center"><span class="badge bg-light text-dark border">${item.dias_registrados} días</span></td>
+                                        <td class="text-center"><span class="badge bg-success px-3 py-2 fs-6">${item.total_asistencias} pers.</span></td>
+                                        <td class="pe-4 text-end text-muted">${Number(item.promedio_diario).toFixed(1)} pers/día</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                }
+            }
+
+            // Exportar Excel
+            btnExportarExcel.addEventListener('click', () => {
+                const token = Auth.getToken();
+                const fInicio = fechaInicioInput.value;
+                const fFin = fechaFinInput.value;
+                const fDiario = fechaDiarioInput.value;
+                const aId = selectArea.value;
+                const uId = selectUbicacion.value;
+                const pId = selectPuesto.value;
+
+                let downloadUrl = `${API_BASE_URL}/reportes/exportar/excel?token=${token}&tipo=${currentTipo}&fechaInicio=${fInicio}&fechaFin=${fFin}&fechaDiario=${fDiario}`;
+                if (aId) downloadUrl += `&areaId=${aId}`;
+                if (uId) downloadUrl += `&ubicacionId=${uId}`;
+                if (pId && currentTipo !== 'resumen_area') downloadUrl += `&puestoId=${pId}`;
+
+                window.open(downloadUrl, '_blank');
+            });
+
+            formReportes.addEventListener('submit', (e) => {
+                e.preventDefault();
+                cargarReporte();
+            });
+
+            selectArea.addEventListener('change', () => {
+                selectUbicacion.value = '';
+                selectPuesto.value = '';
+                cargarReporte();
+            });
+
+            selectUbicacion.addEventListener('change', () => {
+                cargarReporte();
+            });
+
+            selectPuesto.addEventListener('change', () => {
+                cargarReporte();
+            });
+
+            cargarReporte();
+        });
+    </script>
+</body>
+</html>

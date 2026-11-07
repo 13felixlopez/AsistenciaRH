@@ -1,0 +1,35 @@
+{
+  "name": "asistenciarh",
+  "version": "1.0.0",
+  "description": "Sistema Web y API de Control de Asistencia por Áreas y Puestos con SQL Server",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js",
+    "seed": "node database/importExcelData.js",
+    "import-excel": "node database/importExcelData.js"
+  },
+  "keywords": [
+    "asistencia",
+    "recursos-humanos",
+    "sql-server",
+    "express",
+    "nodejs",
+    "reportes"
+  ],
+  "author": "Antigravity",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "connect-flash": "^0.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "ejs": "^3.1.10",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "express-ejs-layouts": "^2.5.1",
+    "express-session": "^1.18.1",
+    "morgan": "^1.10.0",
+    "mssql": "^11.0.1"
+  }
+}

@@ -1,0 +1,234 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-1 text-dark">Puestos de Trabajo</h2>
+        <p class="text-muted mb-0">Gestión de cargos y puestos organizados por cada área operativa.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoPuesto">
+            <i class="bi bi-plus-lg"></i>
+            <span>Nuevo Puesto</span>
+        </button>
+    </div>
+</div>
+
+<!-- Filtro por Área -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-3">
+        <form action="/puestos" method="GET" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <label for="filtroArea" class="col-form-label fw-semibold text-secondary">
+                    <i class="bi bi-funnel me-1"></i> Filtrar por Área:
+                </label>
+            </div>
+            <div class="col-md-4">
+                <select name="areaId" id="filtroArea" class="form-select" onchange="this.form.submit()">
+                    <option value="">-- Todas las Áreas --</option>
+                    <% areas.forEach(function(a) { %>
+                        <option value="<%= a.id_area %>" <%= selectedAreaId === a.id_area ? 'selected' : '' %>>
+                            <%= a.nombre %>
+                        </option>
+                    <% }); %>
+                </select>
+            </div>
+            <% if (selectedAreaId) { %>
+                <div class="col-auto">
+                    <a href="/puestos" class="btn btn-outline-secondary btn-sm">Limpiar filtro</a>
+                </div>
+            <% } %>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla de Puestos -->
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4">Área Perteneciente</th>
+                        <th>Nombre del Puesto</th>
+                        <th>Descripción</th>
+                        <th class="text-center">Estado</th>
+                        <th class="pe-4 text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (puestos && puestos.length > 0) { %>
+                        <% puestos.forEach(function(puesto) { %>
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="badge bg-light text-primary border border-primary-subtle fw-semibold">
+                                        <i class="bi bi-building me-1"></i> <%= puesto.area_nombre %> (<%= puesto.area_codigo %>)
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center flex-wrap gap-1">
+                                        <span class="fw-bold text-dark"><%= puesto.puesto_nombre %></span>
+                                        <% if (puesto.aplica_turnos) { %>
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle" title="Aplica a 2 turnos diarios">
+                                                <i class="bi bi-clock-history me-1 text-warning"></i>2 Turnos
+                                            </span>
+                                        <% } else { %>
+                                            <span class="badge bg-light text-secondary border" title="Turno único diario">
+                                                Turno Único
+                                            </span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td class="text-muted small"><%= puesto.puesto_descripcion || 'Sin descripción' %></td>
+                                <td class="text-center">
+                                    <% if (puesto.activo) { %>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>
+                                    <% } else { %>
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Inactivo</span>
+                                    <% } %>
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-primary btn-edit-puesto"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#modalEditarPuesto"
+                                                data-id="<%= puesto.id_puesto %>"
+                                                data-area="<%= puesto.id_area %>"
+                                                data-nombre="<%= puesto.puesto_nombre %>"
+                                                data-descripcion="<%= puesto.puesto_descripcion || '' %>"
+                                                data-turnos="<%= puesto.aplica_turnos ? '1' : '0' %>"
+                                                data-activo="<%= puesto.activo ? '1' : '0' %>"
+                                                title="Editar puesto">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <form action="/puestos/toggle/<%= puesto.id_puesto %>" method="POST" class="d-inline">
+                                            <button type="button" class="btn btn-outline-<%= puesto.activo ? 'warning' : 'success' %> btn-confirm-action"
+                                                    data-confirm-message="¿Desea <%= puesto.activo ? 'desactivar' : 'activar' %> este puesto?"
+                                                    title="<%= puesto.activo ? 'Desactivar' : 'Activar' %>">
+                                                <i class="bi bi-<%= puesto.activo ? 'eye-slash' : 'check-circle' %>"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-2 d-block mb-2"></i> No se encontraron puestos para el filtro seleccionado.
+                            </td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nuevo Puesto -->
+<div class="modal fade" id="modalNuevoPuesto" tabindex="-1" aria-labelledby="modalNuevoPuestoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <form action="/puestos/crear" method="POST">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="modalNuevoPuestoLabel"><i class="bi bi-plus-circle me-1"></i> Nuevo Puesto de Trabajo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label for="id_area" class="form-label fw-semibold">Área a la que pertenece <span class="text-danger">*</span></label>
+                        <select name="id_area" id="id_area" class="form-select" required>
+                            <option value="">-- Seleccionar Área --</option>
+                            <% areas.forEach(function(a) { %>
+                                <option value="<%= a.id_area %>" <%= selectedAreaId === a.id_area ? 'selected' : '' %>>
+                                    <%= a.nombre %>
+                                </option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="nombre" class="form-label fw-semibold">Nombre del Puesto / Cargo <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Ej. Operador de Máquina, Ensamblador" required maxlength="100">
+                    </div>
+                    <div class="mb-3">
+                        <label for="descripcion" class="form-label fw-semibold">Descripción de Funciones</label>
+                        <textarea class="form-control" id="descripcion" name="descripcion" rows="3" placeholder="Detalle de tareas o alcance del puesto..."></textarea>
+                    </div>
+                    <div class="form-check form-switch p-3 bg-light rounded border">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="nuevo_aplica_turnos" name="aplica_turnos" value="1">
+                        <label class="form-check-label fw-bold text-dark" for="nuevo_aplica_turnos">
+                            <i class="bi bi-clock-history text-primary me-1"></i> ¿Aplica múltiples turnos (2 turnos por día)?
+                        </label>
+                        <div class="form-text small mt-1 ms-1">Al activar esta opción, en el registro diario este puesto tendrá 2 entradas independientes: Turno 1 y Turno 2.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-semibold"><i class="bi bi-save me-1"></i> Guardar Puesto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Editar Puesto -->
+<div class="modal fade" id="modalEditarPuesto" tabindex="-1" aria-labelledby="modalEditarPuestoLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <form action="/puestos/editar" method="POST">
+                <input type="hidden" name="id_puesto" id="edit_id_puesto">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold" id="modalEditarPuestoLabel"><i class="bi bi-pencil-square me-1"></i> Editar Puesto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label for="edit_id_area" class="form-label fw-semibold">Área <span class="text-danger">*</span></label>
+                        <select name="id_area" id="edit_id_area" class="form-select" required>
+                            <% areas.forEach(function(a) { %>
+                                <option value="<%= a.id_area %>"><%= a.nombre %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_puesto_nombre" class="form-label fw-semibold">Nombre del Puesto <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="edit_puesto_nombre" name="nombre" required maxlength="100">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_puesto_descripcion" class="form-label fw-semibold">Descripción</label>
+                        <textarea class="form-control" id="edit_puesto_descripcion" name="descripcion" rows="3"></textarea>
+                    </div>
+                    <div class="form-check form-switch p-3 bg-light rounded border mb-3">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="edit_aplica_turnos" name="aplica_turnos" value="1">
+                        <label class="form-check-label fw-bold text-dark" for="edit_aplica_turnos">
+                            <i class="bi bi-clock-history text-primary me-1"></i> ¿Aplica múltiples turnos (2 turnos por día)?
+                        </label>
+                        <div class="form-text small mt-1 ms-1">Habilita o deshabilita la captura de Turno 1 y Turno 2 para este puesto.</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="edit_puesto_activo" name="activo" value="1">
+                        <label class="form-check-label fw-semibold" for="edit_puesto_activo">Puesto Activo</label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary fw-semibold"><i class="bi bi-check-lg me-1"></i> Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const editModal = new bootstrap.Modal(document.getElementById('modalEditarPuesto'));
+    document.querySelectorAll('.btn-edit-puesto').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('edit_id_puesto').value = btn.getAttribute('data-id');
+            document.getElementById('edit_id_area').value = btn.getAttribute('data-area');
+            document.getElementById('edit_puesto_nombre').value = btn.getAttribute('data-nombre');
+            document.getElementById('edit_puesto_descripcion').value = btn.getAttribute('data-descripcion');
+            document.getElementById('edit_aplica_turnos').checked = btn.getAttribute('data-turnos') === '1';
+            document.getElementById('edit_puesto_activo').checked = btn.getAttribute('data-activo') === '1';
+            editModal.show();
+        });
+    });
+});
+</script>

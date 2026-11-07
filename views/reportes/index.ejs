@@ -1,0 +1,556 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-1 text-dark">Centro de Reportes Estadísticos</h2>
+        <p class="text-muted mb-0">Análisis cuantitativo de personal por puesto, ubicación, área y tendencias temporales.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <!-- Botón Exportar a Excel -->
+        <a href="/reportes/exportar/excel?tipo=<%= tipoReporte %>&fechaInicio=<%= fechaInicio %>&fechaFin=<%= fechaFin %>&fechaDiario=<%= fechaDiario %>&areaId=<%= selectedAreaId || '' %>&ubicacionId=<%= selectedUbicacionId || '' %>&puestoId=<%= selectedPuestoId || '' %>" 
+           class="btn btn-success d-flex align-items-center gap-2 shadow-sm">
+            <i class="bi bi-file-earmark-excel-fill"></i>
+            <span>Exportar a Excel</span>
+        </a>
+        <!-- Botón Imprimir / PDF -->
+        <button type="button" class="btn btn-outline-dark d-flex align-items-center gap-2" onclick="window.print()">
+            <i class="bi bi-printer"></i>
+            <span class="d-none d-sm-inline">Imprimir / PDF</span>
+        </button>
+    </div>
+</div>
+
+<%- include('../partials/alerts') %>
+
+<!-- Filtros de Reporte -->
+<div class="card shadow-sm border-0 mb-4 no-print">
+    <div class="card-header bg-white py-3 border-bottom">
+        <div class="nav nav-pills card-header-pills" id="reportTabs" role="tablist">
+            <a class="nav-link <%= tipoReporte === 'detalle_puesto' ? 'active' : '' %>" href="/reportes?tipo=detalle_puesto">
+                <i class="bi bi-people-fill me-1"></i> Asistencia por Puestos & Tendencias
+            </a>
+            <a class="nav-link <%= tipoReporte === 'resumen_area' ? 'active' : '' %>" href="/reportes?tipo=resumen_area">
+                <i class="bi bi-pie-chart me-1"></i> Resumen & Evolución por Área
+            </a>
+            <a class="nav-link <%= tipoReporte === 'diario' ? 'active' : '' %>" href="/reportes?tipo=diario">
+                <i class="bi bi-calendar-day me-1"></i> Reporte Diario Consolidado
+            </a>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
+        <form action="/reportes" method="GET" class="row g-3 align-items-end" id="formReportes">
+            <input type="hidden" name="tipo" value="<%= tipoReporte %>">
+
+            <% if (tipoReporte === 'diario') { %>
+                <div class="col-md-2">
+                    <label for="fechaDiario" class="form-label fw-semibold text-secondary small">
+                        <i class="bi bi-calendar-event me-1"></i> Fecha Específica:
+                    </label>
+                    <input type="date" class="form-control" id="fechaDiario" name="fechaDiario" value="<%= fechaDiario %>" required>
+                </div>
+            <% } else { %>
+                <div class="col-md-2">
+                    <label for="fechaInicio" class="form-label fw-semibold text-secondary small">
+                        <i class="bi bi-calendar-plus me-1"></i> Fecha Inicial:
+                    </label>
+                    <input type="date" class="form-control" id="fechaInicio" name="fechaInicio" value="<%= fechaInicio %>" required>
+                </div>
+                <div class="col-md-2">
+                    <label for="fechaFin" class="form-label fw-semibold text-secondary small">
+                        <i class="bi bi-calendar-check me-1"></i> Fecha Final:
+                    </label>
+                    <input type="date" class="form-control" id="fechaFin" name="fechaFin" value="<%= fechaFin %>" required>
+                </div>
+            <% } %>
+
+            <!-- Selector de Área -->
+            <div class="col-md-3">
+                <label for="areaId" class="form-label fw-semibold text-secondary small">
+                    <i class="bi bi-building me-1"></i> Área Operativa:
+                </label>
+                <select name="areaId" id="areaId" class="form-select" onchange="document.getElementById('formReportes').submit()">
+                    <% if (areas.length > 1) { %>
+                        <option value="">-- Todas mis Áreas --</option>
+                    <% } %>
+                    <% areas.forEach(function(a) { %>
+                        <option value="<%= a.id_area %>" <%= (selectedAreaId === a.id_area || areas.length === 1) ? 'selected' : '' %>>
+                            <%= a.nombre %>
+                        </option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <!-- Selector de Ubicación -->
+            <div class="col-md-2">
+                <label for="ubicacionId" class="form-label fw-semibold text-secondary small">
+                    <i class="bi bi-geo-alt-fill me-1 text-warning"></i> Ubicación / Patio:
+                </label>
+                <select name="ubicacionId" id="ubicacionId" class="form-select" <%= (!ubicacionesFiltro || ubicacionesFiltro.length === 0) ? 'disabled' : '' %> onchange="document.getElementById('formReportes').submit()">
+                    <option value="">-- Todas las Ubicaciones --</option>
+                    <% if (ubicacionesFiltro && ubicacionesFiltro.length > 0) { %>
+                        <% ubicacionesFiltro.forEach(function(u) { %>
+                            <option value="<%= u.id_ubicacion %>" <%= selectedUbicacionId === u.id_ubicacion ? 'selected' : '' %>>
+                                <%= u.nombre %>
+                            </option>
+                        <% }); %>
+                    <% } %>
+                </select>
+            </div>
+
+            <!-- Selector de Puesto de Trabajo -->
+            <div class="col-md-2">
+                <label for="puestoId" class="form-label fw-semibold text-secondary small">
+                    <i class="bi bi-person-workspace me-1 text-primary"></i> Puesto:
+                </label>
+                <select name="puestoId" id="puestoId" class="form-select">
+                    <option value="">-- Todos los Puestos --</option>
+                    <% if (puestosFiltro && puestosFiltro.length > 0) { %>
+                        <% puestosFiltro.forEach(function(p) { %>
+                            <option value="<%= p.id_puesto %>" <%= selectedPuestoId === p.id_puesto ? 'selected' : '' %>>
+                                <%= p.nombre %>
+                            </option>
+                        <% }); %>
+                    <% } %>
+                </select>
+            </div>
+
+            <!-- Botón Generar -->
+            <div class="col-md-1">
+                <button type="submit" class="btn btn-primary w-100 fw-semibold px-2" title="Aplicar filtros">
+                    <i class="bi bi-funnel-fill"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tarjetas de Totales -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0 stat-card">
+            <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Total de Personas Asistieron</span>
+                    <h3 class="fw-bold my-1 text-primary"><%= totales.personas %></h3>
+                    <small class="text-muted">En el periodo seleccionado</small>
+                </div>
+                <div class="stat-icon bg-primary-subtle text-primary">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <% if (tipoReporte === 'diario') { %>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 stat-card stat-success">
+                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Puestos Evaluados</span>
+                        <h3 class="fw-bold my-1 text-success"><%= totales.totalPuestos %></h3>
+                        <small class="text-muted">Posiciones registradas</small>
+                    </div>
+                    <div class="stat-icon bg-success-subtle text-success">
+                        <i class="bi bi-check2-all"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 stat-card stat-warning">
+                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Fecha Seleccionada</span>
+                        <h4 class="fw-bold my-1 text-dark"><%= fechaDiario %></h4>
+                        <small class="text-muted">Jornada consolidada</small>
+                    </div>
+                    <div class="stat-icon bg-warning-subtle text-warning">
+                        <i class="bi bi-calendar-event"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 stat-card stat-success">
+                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Puestos Analizados</span>
+                        <h3 class="fw-bold my-1 text-success"><%= totales.totalPuestos %></h3>
+                        <small class="text-muted"><%= selectedPuestoId ? 'Puesto específico seleccionado' : 'Puestos en esta consulta' %></small>
+                    </div>
+                    <div class="stat-icon bg-success-subtle text-success">
+                        <i class="bi bi-briefcase-fill"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 stat-card stat-teal">
+                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Periodo Analizado</span>
+                        <h6 class="fw-bold my-1 text-teal text-truncate"><%= fechaInicio %> al <%= fechaFin %></h6>
+                        <small class="text-muted">
+                            <% if (selectedUbicacionId && ubicacionesFiltro) { %>
+                                <% const uActual = ubicacionesFiltro.find(u => u.id_ubicacion === selectedUbicacionId); %>
+                                <span class="badge bg-warning text-dark"><%= uActual ? uActual.nombre : 'Ubicación' %></span>
+                            <% } else { %>
+                                Rango de fechas
+                            <% } %>
+                        </small>
+                    </div>
+                    <div class="stat-icon bg-teal-subtle text-teal">
+                        <i class="bi bi-calendar-range"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<!-- ========================================================================= -->
+<!-- PESTAÑA: DETALLE POR PUESTOS Y GRÁFICO DE COMPORTAMIENTO TEMPORAL         -->
+<!-- ========================================================================= -->
+<% if (tipoReporte === 'detalle_puesto') { %>
+
+    <!-- Gráfico de Comportamiento Temporal por Puesto -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-graph-up-arrow text-primary me-2"></i> Comportamiento de la Asistencia por Puesto en el Tiempo
+                </h5>
+                <small class="text-muted">Evolución diaria de asistencia de personal (haz clic en la leyenda para ocultar/mostrar puestos)</small>
+            </div>
+            <% if (selectedPuestoId && puestosFiltro) { %>
+                <% const pActual = puestosFiltro.find(p => p.id_puesto === selectedPuestoId); %>
+                <span class="badge bg-primary fs-6 px-3 py-1">
+                    <i class="bi bi-person-fill me-1"></i> Puesto: <%= pActual ? pActual.nombre : '' %>
+                </span>
+            <% } %>
+        </div>
+        <div class="card-body p-3">
+            <% if (chartDataPuestos && chartDataPuestos.datasets && chartDataPuestos.datasets.length > 0) { %>
+                <div style="position: relative; height: 320px;">
+                    <canvas id="chartPuestosCanvas"></canvas>
+                </div>
+            <% } else { %>
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x fs-1 d-block mb-2 text-secondary"></i>
+                    No se registran datos diarios para los filtros seleccionados en este rango.
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Distribución Rápida (Cuántos Patieros, Punteros, etc.) -->
+    <% if (data && data.length > 0 && totales.personas > 0) { %>
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-pie-chart-fill text-warning me-2"></i> Distribución de Asistentes por Puesto en el Periodo
+                </h6>
+            </div>
+            <div class="card-body p-3">
+                <div class="row g-3">
+                    <% data.slice(0, 8).forEach(function(row) { 
+                        const porcentaje = totales.personas > 0 ? Math.round((row.total_asistencias / totales.personas) * 100) : 0;
+                    %>
+                        <div class="col-12 col-sm-6 col-lg-3">
+                            <div class="p-3 border rounded-3 bg-light shadow-sm h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="fw-bold text-dark text-truncate" title="<%= row.puesto_nombre %>">
+                                        <%= row.puesto_nombre %>
+                                    </span>
+                                    <span class="badge bg-primary fs-6"><%= row.total_asistencias %></span>
+                                </div>
+                                <div class="progress mb-2" style="height: 6px;">
+                                    <div class="progress-bar bg-primary" role="progressbar" style="width: <%= porcentaje %>%;" aria-valuenow="<%= porcentaje %>" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <div class="d-flex justify-content-between text-muted small">
+                                    <span><%= porcentaje %>% del total</span>
+                                    <span>Promedio: <strong><%= Number(row.promedio_diario).toFixed(1) %>/día</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                    <% }); %>
+                </div>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Tabla Detallada por Puesto -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-briefcase-fill text-teal me-2"></i> Resumen Cuantitativo por Puesto de Trabajo
+            </h5>
+            <span class="badge bg-light text-dark border">Total: <%= totales.personas %> personas sumadas</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Área Operativa</th>
+                            <th>Puesto de Trabajo</th>
+                            <th class="text-center">Total Personas</th>
+                            <th class="text-center">% Participación</th>
+                            <th class="text-center">Días Registrados</th>
+                            <th class="text-center">Promedio Diario</th>
+                            <th class="text-center">Máximo en un Día</th>
+                            <th class="pe-4 text-end">Mínimo en un Día</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (data && data.length > 0) { %>
+                            <% data.forEach(function(row) { 
+                                const pct = totales.personas > 0 ? ((row.total_asistencias / totales.personas) * 100).toFixed(1) : 0;
+                            %>
+                                <tr>
+                                    <td class="ps-4">
+                                        <span class="badge bg-light text-dark border"><%= row.area_nombre %></span>
+                                    </td>
+                                    <td class="fw-bold text-dark fs-6">
+                                        <%= row.puesto_nombre %>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success px-3 py-2 fs-6 fw-bold">
+                                            <%= row.total_asistencias %> personas
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <div class="progress flex-grow-1" style="max-width: 80px; height: 6px;">
+                                                <div class="progress-bar bg-success" style="width: <%= pct %>%;"></div>
+                                            </div>
+                                            <span class="small fw-semibold text-secondary"><%= pct %>%</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-center"><%= row.dias_registrados %> días</td>
+                                    <td class="text-center fw-semibold text-primary"><%= Number(row.promedio_diario).toFixed(1) %> pers/día</td>
+                                    <td class="text-center text-success fw-bold"><%= row.max_dia %></td>
+                                    <td class="pe-4 text-end text-muted"><%= row.min_dia %></td>
+                                </tr>
+                            <% }); %>
+                        <% } else { %>
+                            <tr><td colspan="8" class="text-center py-5 text-muted">No se encontraron registros de puestos para los filtros especificados.</td></tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+<!-- ========================================================================= -->
+<!-- PESTAÑA: RESUMEN Y EVOLUCIÓN POR ÁREA                                     -->
+<!-- ========================================================================= -->
+<% } else if (tipoReporte === 'resumen_area') { %>
+
+    <!-- Gráfico Comparativo por Área -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-graph-up text-primary me-2"></i> Evolución de Asistencia Diaria por Área</h5>
+        </div>
+        <div class="card-body p-3">
+            <div style="position: relative; height: 320px;">
+                <canvas id="reporteLineChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de Resumen por Área -->
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 border-bottom">
+            <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-table text-primary me-2"></i> Totales Acumulados por Área</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Código</th>
+                            <th>Área Operativa</th>
+                            <th class="text-center">Total Puestos</th>
+                            <th class="text-center">Días con Registro</th>
+                            <th class="text-center">Total Personas</th>
+                            <th class="pe-4 text-end">Promedio por Puesto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (data && data.length > 0) { %>
+                            <% data.forEach(function(row) { %>
+                                <tr>
+                                    <td class="ps-4 fw-bold text-primary"><%= row.area_codigo %></td>
+                                    <td class="fw-semibold text-dark"><%= row.area_nombre %></td>
+                                    <td class="text-center"><%= row.total_puestos %></td>
+                                    <td class="text-center"><%= row.dias_con_registro %></td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary px-3 py-2 fs-6 fw-bold"><%= row.total_asistencias %></span>
+                                    </td>
+                                    <td class="pe-4 text-end fw-semibold text-secondary">
+                                        <%= Number(row.promedio_por_puesto).toFixed(1) %> pers/puesto
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        <% } else { %>
+                            <tr><td colspan="6" class="text-center py-4 text-muted">No se encontraron datos para el rango seleccionado.</td></tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+<!-- ========================================================================= -->
+<!-- PESTAÑA: REPORTE DIARIO CONSOLIDADO                                       -->
+<!-- ========================================================================= -->
+<% } else { %>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-calendar-check-fill text-primary me-2"></i> Reporte Detallado del Día: <%= fechaDiario %>
+            </h5>
+            <span class="badge bg-primary fs-6 px-3 py-2">Gran Total: <%= totales.personas %> asistentes</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Área / Ubicación</th>
+                            <th>Puesto de Trabajo</th>
+                            <th class="text-center">Asistieron</th>
+                            <th>Observaciones</th>
+                            <th>Registrado Por</th>
+                            <th class="pe-4 text-end">Hora Registro</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (data && data.length > 0) { %>
+                            <% data.forEach(function(row) { %>
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="fw-semibold text-dark"><%= row.area_nombre %></div>
+                                        <% if (row.ubicacion_nombre) { %>
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle small mt-1">
+                                                <i class="bi bi-geo-alt-fill text-warning me-1"></i><%= row.ubicacion_nombre %>
+                                            </span>
+                                        <% } %>
+                                    </td>
+                                    <td class="fw-bold text-dark">
+                                        <%= row.puesto_nombre %>
+                                        <% if (row.turno === 'TURNO_1') { %>
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-1" style="font-size: 0.72rem;">
+                                                <i class="bi bi-sun-fill text-warning me-1"></i>Turno 1
+                                            </span>
+                                        <% } else if (row.turno === 'TURNO_2') { %>
+                                            <span class="badge bg-info-subtle text-dark border border-info-subtle ms-1" style="font-size: 0.72rem;">
+                                                <i class="bi bi-moon-fill text-info me-1"></i>Turno 2
+                                            </span>
+                                        <% } %>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge <%= row.cantidad_asistentes > 0 ? 'bg-success' : 'bg-secondary' %> px-3 py-2 fs-6 fw-bold">
+                                            <%= row.cantidad_asistentes %>
+                                        </span>
+                                    </td>
+                                    <td class="small text-muted"><%= row.observaciones || '-' %></td>
+                                    <td class="small text-muted"><i class="bi bi-person me-1"></i><%= row.registrado_por || 'Sin captura' %></td>
+                                    <td class="pe-4 text-end small text-muted">
+                                        <i class="bi bi-clock me-1 text-secondary"></i><%= row.hora_registro_texto || (row.fecha_registro ? new Date(row.fecha_registro).toLocaleTimeString('es-ES') : '-') %>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        <% } else { %>
+                            <tr><td colspan="6" class="text-center py-4 text-muted">No se encontraron registros para la fecha <%= fechaDiario %>.</td></tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+<% } %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Gráfico de Comportamiento Temporal por Puesto
+    <% if (tipoReporte === 'detalle_puesto') { %>
+        const canvasPuestos = document.getElementById('chartPuestosCanvas');
+        if (canvasPuestos) {
+            const chartDataPuestos = <%- JSON.stringify(chartDataPuestos) %>;
+            if (chartDataPuestos && chartDataPuestos.labels && chartDataPuestos.labels.length > 0) {
+                new Chart(canvasPuestos, {
+                    type: 'line',
+                    data: chartDataPuestos,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'Cantidad de Personas' },
+                                ticks: { stepSize: 1 }
+                            },
+                            x: {
+                                title: { display: true, text: 'Fecha (Día/Mes)' }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { boxWidth: 14, font: { size: 11 } }
+                            },
+                            tooltip: {
+                                padding: 10,
+                                cornerRadius: 8
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    <% } %>
+
+    // 2. Gráfico por Área
+    <% if (tipoReporte === 'resumen_area') { %>
+        const canvasArea = document.getElementById('reporteLineChart');
+        if (canvasArea) {
+            const chartConfig = <%- JSON.stringify(chartData) %>;
+            if (chartConfig && chartConfig.labels && chartConfig.labels.length > 0) {
+                new Chart(canvasArea, {
+                    type: 'line',
+                    data: chartConfig,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'Cantidad de Asistentes' }
+                            },
+                            x: {
+                                title: { display: true, text: 'Fecha' }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    <% } %>
+});
+</script>

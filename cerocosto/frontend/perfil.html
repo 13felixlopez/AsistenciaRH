@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Perfil | Registro de Asistencia</title>
+    <!-- Metadatos PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#860063">
+    <link rel="icon" type="image/png" href="/icons/favicon.png">
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body class="bg-light">
+    <div class="app-wrapper d-flex">
+        <!-- Sidebar Navigation -->
+        <aside id="sidebarMenu"></aside>
+
+        <!-- Main Content Area -->
+        <div class="main-wrapper flex-grow-1 d-flex flex-column min-vh-100 overflow-hidden">
+            <!-- Navbar -->
+            <nav id="appNavbar"></nav>
+
+            <!-- Main Body -->
+            <main class="flex-grow-1 p-3 p-md-4 overflow-auto">
+                <div class="container-fluid p-0">
+                    <div class="row">
+                        <!-- Tarjeta de Perfil -->
+                        <div class="col-lg-4 mb-4">
+                            <div class="card shadow-sm border-0 h-100">
+                                <div class="card-body text-center p-4">
+                                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow mb-3" 
+                                         id="profileAvatar" 
+                                         style="width: 80px; height: 80px; font-size: 2rem; font-weight: bold;">
+                                        U
+                                    </div>
+                                    <h4 class="fw-bold mb-1" id="profileNombre">-</h4>
+                                    <p class="text-muted mb-2" id="profileCargo">-</p>
+                                    <span class="badge bg-primary px-3 py-2 fs-6" id="profileRol">-</span>
+
+                                    <hr class="my-4">
+
+                                    <div class="text-start">
+                                        <div class="mb-3">
+                                            <small class="text-muted d-block">Nombre de Usuario</small>
+                                            <span class="fw-semibold text-dark"><i class="bi bi-person-badge me-1 text-primary"></i> <span id="profileUsuario">-</span></span>
+                                        </div>
+                                        <div class="mb-3">
+                                            <small class="text-muted d-block">Correo Electrónico</small>
+                                            <span class="fw-semibold text-dark"><i class="bi bi-envelope me-1 text-primary"></i> <span id="profileEmail">-</span></span>
+                                        </div>
+                                        <div class="mb-3">
+                                            <small class="text-muted d-block">Fecha de Alta</small>
+                                            <span class="fw-semibold text-dark"><i class="bi bi-calendar-event me-1 text-primary"></i> <span id="profileFechaCreacion">-</span></span>
+                                        </div>
+                                        <div>
+                                            <small class="text-muted d-block">Último Acceso</small>
+                                            <span class="fw-semibold text-dark"><i class="bi bi-clock-history me-1 text-primary"></i> <span id="profileUltimoAcceso">-</span></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Columna de Formularios y Permisos -->
+                        <div class="col-lg-8">
+                            <!-- Tarjeta Cambiar Contraseña -->
+                            <div class="card shadow-sm border-0 mb-4">
+                                <div class="card-header bg-white py-3 border-bottom">
+                                    <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-shield-lock text-primary me-2"></i> Cambiar Mi Contraseña</h5>
+                                </div>
+                                <div class="card-body p-4">
+                                    <form id="formPassword">
+                                        <div class="mb-3">
+                                            <label for="actualPassword" class="form-label fw-semibold">Contraseña Actual</label>
+                                            <input type="password" class="form-control" id="actualPassword" required>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="newPassword" class="form-label fw-semibold">Nueva Contraseña</label>
+                                                <input type="password" class="form-control" id="newPassword" required minlength="6">
+                                                <div class="form-text">Mínimo 6 caracteres.</div>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="confirmPassword" class="form-label fw-semibold">Confirmar Nueva Contraseña</label>
+                                                <input type="password" class="form-control" id="confirmPassword" required minlength="6">
+                                            </div>
+                                        </div>
+                                        <div class="text-end">
+                                            <button type="submit" class="btn btn-primary px-4 fw-semibold" id="btnCambiarPwd">
+                                                <i class="bi bi-save me-1"></i> Actualizar Contraseña
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Tarjeta Áreas Asignadas -->
+                            <div class="card shadow-sm border-0">
+                                <div class="card-header bg-white py-3 border-bottom">
+                                    <h5 class="fw-bold mb-0 text-dark"><i class="bi bi-diagram-3 text-success me-2"></i> Mis Áreas Asignadas</h5>
+                                </div>
+                                <div class="card-body p-4" id="containerAreasPerfil">
+                                    <div class="text-muted small text-center py-3">Cargando áreas asignadas...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Footer -->
+            <footer id="appFooter"></footer>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle & App Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/config.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/layout.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            initAppLayout('perfil');
+
+            try {
+                const res = await api.get('/auth/perfil');
+                if (!res.success) return;
+
+                const user = res.user;
+                const areas = res.areasAsignadas || [];
+
+                document.getElementById('profileAvatar').textContent = (user.nombre || 'U').charAt(0).toUpperCase();
+                document.getElementById('profileNombre').textContent = user.nombre || '-';
+                document.getElementById('profileCargo').textContent = user.cargo || 'Sin cargo especificado';
+                
+                const rolBadge = document.getElementById('profileRol');
+                rolBadge.textContent = user.rol_nombre || (user.rol_codigo === 'ADMIN' ? 'Administrador' : 'Supervisor');
+                rolBadge.className = `badge ${user.rol_codigo === 'ADMIN' ? 'bg-danger' : 'bg-primary'} px-3 py-2 fs-6`;
+
+                document.getElementById('profileUsuario').textContent = user.usuario ? '@' + user.usuario : '-';
+                document.getElementById('profileEmail').textContent = user.email || '-';
+
+                try {
+                    document.getElementById('profileFechaCreacion').textContent = user.fecha_creacion ? new Date(user.fecha_creacion).toLocaleDateString('es-ES') : '-';
+                    document.getElementById('profileUltimoAcceso').textContent = user.ultimo_acceso ? new Date(user.ultimo_acceso).toLocaleString('es-ES') : 'Reciente';
+                } catch(e) {}
+
+                // Contenedor Áreas
+                const containerAreas = document.getElementById('containerAreasPerfil');
+                if (user.rol_codigo === 'ADMIN') {
+                    containerAreas.innerHTML = `
+                        <div class="alert alert-info d-flex align-items-center mb-0">
+                            <i class="bi bi-info-circle-fill fs-4 me-3"></i>
+                            <div>
+                                <strong>Acceso Total como Administrador:</strong> Puedes ver, registrar y gestionar todas las áreas y puestos de la organización sin restricciones.
+                            </div>
+                        </div>
+                    `;
+                } else if (areas.length > 0) {
+                    containerAreas.innerHTML = `
+                        <p class="text-muted mb-3">Tienes acceso autorizado a las siguientes áreas de trabajo:</p>
+                        <div class="list-group">
+                            ${areas.map(a => `
+                                <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-0 fw-bold"><i class="bi bi-building me-2 text-primary"></i> ${a.nombre}</h6>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        ${a.permite_registro ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Permite Registrar</span>' : ''}
+                                        ${a.permite_reportes ? '<span class="badge bg-primary-subtle text-primary border border-primary-subtle">Permite Reportes</span>' : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    containerAreas.innerHTML = `
+                        <div class="p-3 text-center text-muted">
+                            <i class="bi bi-lock fs-2 d-block mb-2"></i>
+                            No tienes áreas asignadas actualmente. Contacta al Administrador.
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                console.error('Error cargando perfil:', err);
+                showToast('error', 'Error al cargar perfil');
+            }
+
+            // Cambiar Contraseña
+            document.getElementById('formPassword').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const actualPassword = document.getElementById('actualPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+
+                if (newPassword !== confirmPassword) {
+                    Swal.fire('Error', 'La nueva contraseña y su confirmación no coinciden.', 'warning');
+                    return;
+                }
+
+                const btn = document.getElementById('btnCambiarPwd');
+                btn.disabled = true;
+
+                try {
+                    const res = await api.post('/auth/perfil/password', { actualPassword, newPassword, confirmPassword });
+                    if (res.success) {
+                        Swal.fire('¡Éxito!', res.message || 'Contraseña actualizada.', 'success');
+                        document.getElementById('formPassword').reset();
+                    }
+                } catch (err) {
+                    Swal.fire('Error', err.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

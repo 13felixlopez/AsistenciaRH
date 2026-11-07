@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+backend/node_modules/
+cerocosto/node_modules/
+
+# Variables de entorno y secretos
+.env
+.env.local
+.env.*.local
+cerocosto/.env
+!.env.example
+!cerocosto/.env.example
+
+# Logs y archivos del sistema
+*.log
+.netlify/
+Thumbs.db
+.DS_Store
