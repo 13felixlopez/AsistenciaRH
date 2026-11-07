@@ -6,6 +6,7 @@ const cors = require('cors');
 const { isAuthenticated } = require('./middlewares/auth');
 
 // Controladores y Rutas
+const { initDatabase } = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const areaRoutes = require('./routes/areaRoutes');
 const puestoRoutes = require('./routes/puestoRoutes');
@@ -41,6 +42,23 @@ apiRouter.get('/health', (req, res) => {
     });
 });
 
+// Endpoint de inicialización / migración de base de datos en Turso
+apiRouter.get('/init-db', async (req, res) => {
+    try {
+        const force = req.query.force === 'true';
+        const result = await initDatabase(force);
+        res.json({
+            success: true,
+            ...result
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: 'Error inicializando base de datos en Turso: ' + err.message
+        });
+    }
+});
+
 // Rutas Públicas de Autenticación
 apiRouter.use('/auth', authRoutes);
 
@@ -53,9 +71,18 @@ apiRouter.use('/asistencias', asistenciaRoutes);
 apiRouter.use('/reportes', reporteRoutes);
 apiRouter.use('/usuarios', usuarioRoutes);
 
-// Montar en '/api' y en '/' para máxima compatibilidad con cualquier regla serverless
+// Montar en todas las rutas para compatibilidad total con Netlify Functions y desarrollo local
+app.use('/.netlify/functions/api', apiRouter);
 app.use('/api', apiRouter);
 app.use('/', apiRouter);
+
+// Manejador 404 siempre en formato JSON
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Ruta no encontrada en la API: ${req.method} ${req.originalUrl || req.url}`
+    });
+});
 
 // Manejo global de errores (500)
 app.use((err, req, res, next) => {

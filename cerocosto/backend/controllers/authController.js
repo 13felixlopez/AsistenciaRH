@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { query } = require('../config/db');
+const { query, initDatabase } = require('../config/db');
 
 // Iniciar sesión y retornar JWT
 async function login(req, res) {
@@ -15,13 +15,30 @@ async function login(req, res) {
     }
 
     try {
-        const result = await query(`
-            SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.password_hash, u.cargo, u.activo,
-                   r.id_rol, r.codigo AS rol_codigo, r.nombre AS rol_nombre
-            FROM Usuarios u
-            INNER JOIN Roles r ON u.id_rol = r.id_rol
-            WHERE LOWER(u.email) = ? OR LOWER(u.usuario) = ?
-        `, [loginIdentifier, loginIdentifier]);
+        let result;
+        try {
+            result = await query(`
+                SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.password_hash, u.cargo, u.activo,
+                       r.id_rol, r.codigo AS rol_codigo, r.nombre AS rol_nombre
+                FROM Usuarios u
+                INNER JOIN Roles r ON u.id_rol = r.id_rol
+                WHERE LOWER(u.email) = ? OR LOWER(u.usuario) = ?
+            `, [loginIdentifier, loginIdentifier]);
+        } catch (dbErr) {
+            if (dbErr.message && (dbErr.message.includes('no such table') || dbErr.message.includes('not found'))) {
+                console.log('🔄 Tablas no encontradas en Turso. Auto-inicializando esquema...');
+                await initDatabase();
+                result = await query(`
+                    SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.password_hash, u.cargo, u.activo,
+                           r.id_rol, r.codigo AS rol_codigo, r.nombre AS rol_nombre
+                    FROM Usuarios u
+                    INNER JOIN Roles r ON u.id_rol = r.id_rol
+                    WHERE LOWER(u.email) = ? OR LOWER(u.usuario) = ?
+                `, [loginIdentifier, loginIdentifier]);
+            } else {
+                throw dbErr;
+            }
+        }
 
         if (result.recordset.length === 0) {
             return res.status(401).json({

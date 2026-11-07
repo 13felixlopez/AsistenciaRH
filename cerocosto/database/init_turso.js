@@ -34,10 +34,14 @@ async function initTurso() {
     // Función para ejecutar SQL por lotes
     async function executeBatch(sqlContent, label) {
         console.log(`⏳ Aplicando ${label}...`);
-        const statements = sqlContent
+        const cleaned = sqlContent
+            .replace(/--.*$/gm, '')
+            .replace(/\/\*[\s\S]*?\*\//g, '');
+
+        const statements = cleaned
             .split(';')
             .map(s => s.trim())
-            .filter(s => s.length > 0 && !s.startsWith('--'));
+            .filter(s => s.length > 0);
 
         if (client) {
             for (const stmt of statements) {
