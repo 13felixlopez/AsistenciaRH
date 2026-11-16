@@ -265,6 +265,8 @@
                     return;
                 }
 
+                const haySinPlantilla = puestos.some(p => (parseInt(p.cantidad_contratada, 10) || 0) <= 0);
+
                 captureContainer.innerHTML = `
                     <div class="card shadow-sm border-0 mb-5">
                         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -287,21 +289,47 @@
                             </div>
                         </div>
 
+                        ${haySinPlantilla ? `
+                            <div class="alert alert-warning border-warning d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 m-3 mb-0 shadow-sm">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+                                    <div>
+                                        <strong class="d-block text-dark">Puestos con Plantilla en 0</strong>
+                                        <small class="text-muted">Los puestos activos deben tener registrada su dotación de personal contratado antes de poder capturar su asistencia.</small>
+                                    </div>
+                                </div>
+                                <a href="/plantilla.html?areaId=${data.selectedAreaId}" class="btn btn-warning text-dark fw-bold btn-sm text-nowrap d-flex align-items-center gap-1 shadow-sm">
+                                    <i class="bi bi-people-fill"></i>
+                                    <span>Registrar Plantilla Contratada</span>
+                                </a>
+                            </div>
+                        ` : ''}
+
                         <div class="card-body p-0">
                             <form id="formGuardarAsistencias">
                                 <div class="puestos-container">
-                                    ${puestos.map((p, idx) => `
+                                    ${puestos.map((p, idx) => {
+                                        const contratados = parseInt(p.cantidad_contratada, 10) || 0;
+                                        const requierePlantilla = contratados <= 0;
+                                        return `
                                         <div class="puesto-row p-3 border-bottom ${!p.editable ? 'bg-light-subtle opacity-75' : (idx % 2 === 0 ? 'bg-white' : 'bg-light-subtle')}">
                                             <div class="row g-2 align-items-center">
                                                 <div class="col-12 col-md-5">
                                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
                                                         <div class="d-flex align-items-center gap-2">
                                                             <span class="fw-bold text-dark fs-6">${p.puesto_nombre}</span>
-                                                            ${p.cantidad_contratada > 0 ? `
+                                                            ${contratados > 0 ? `
                                                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.72rem;" title="Personal contratado/autorizado">
-                                                                    <i class="bi bi-people me-1"></i>Contratados: ${p.cantidad_contratada}
+                                                                    <i class="bi bi-people me-1"></i>Contratados: ${contratados}
                                                                 </span>
-                                                            ` : ''}
+                                                            ` : `
+                                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.72rem;" title="Plantilla en 0: Obligatorio registrar personal contratado">
+                                                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Requiere Plantilla (0 contratados)
+                                                                </span>
+                                                                <a href="/plantilla.html?areaId=${data.selectedAreaId}" class="badge bg-warning text-dark text-decoration-none border border-warning" style="font-size: 0.7rem;" title="Definir personal contratado">
+                                                                    <i class="bi bi-pencil-square me-1"></i>Asignar
+                                                                </a>
+                                                            `}
                                                             ${p.aplica_turnos ? `
                                                                 <span class="badge bg-${p.turno_badge}-subtle text-dark border border-${p.turno_badge}-subtle" style="font-size: 0.72rem;">
                                                                     ${p.turno_icon ? `<i class="bi bi-${p.turno_icon}-fill text-${p.turno_badge} me-1"></i>` : ''}
@@ -324,7 +352,7 @@
                                                     ${p.puesto_descripcion ? `<small class="text-muted d-block mt-1" style="font-size: 0.75rem;">${p.puesto_descripcion}</small>` : ''}
                                                     ${p.registrado_por ? `
                                                         <small class="text-muted d-block" style="font-size: 0.7rem;">
-                                                             Por: ${p.registrado_por}
+                                                            <i class="bi bi-person me-1"></i> Por: ${p.registrado_por}
                                                         </small>
                                                     ` : ''}
                                                 </div>
@@ -337,23 +365,28 @@
                                                             <i class="bi bi-people"></i>
                                                         </span>
                                                         <input type="number" 
-                                                               class="form-control input-cantidad fw-bold text-center fs-5 ${!p.editable ? 'bg-light text-muted' : ''}" 
+                                                               class="form-control input-cantidad fw-bold text-center fs-5 ${!p.editable ? 'bg-light text-muted' : ''} ${requierePlantilla ? 'border-danger-subtle bg-danger-subtle text-danger' : ''}" 
                                                                data-puesto-id="${p.id_puesto}"
                                                                data-nombre="${p.puesto_nombre}"
-                                                               data-max="${p.cantidad_contratada || 0}"
+                                                               data-max="${contratados}"
+                                                               data-requiere-plantilla="${requierePlantilla ? 'true' : 'false'}"
                                                                data-turno="${p.turno}"
                                                                value="${(p.cantidad_asistentes !== '' && p.cantidad_asistentes !== null && p.cantidad_asistentes !== undefined) ? p.cantidad_asistentes : ''}" 
                                                                min="0" 
-                                                               max="${p.cantidad_contratada > 0 ? p.cantidad_contratada : 500}" 
-                                                               step="1"
-                                                               placeholder=""
+                                                               max="${contratados > 0 ? contratados : 0}" 
+                                                               step="1" 
+                                                               placeholder="${requierePlantilla ? 'Plantilla 0' : ''}"
                                                                ${!p.editable ? 'readonly' : ''}>
                                                     </div>
-                                                    ${p.cantidad_contratada > 0 ? `
+                                                    ${contratados > 0 ? `
                                                         <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
-                                                            Máximo permitido: <strong>${p.cantidad_contratada}</strong>
+                                                            Máximo permitido: <strong>${contratados}</strong>
                                                         </small>
-                                                    ` : ''}
+                                                    ` : `
+                                                        <small class="text-danger fw-semibold d-block text-center mt-1" style="font-size: 0.7rem;">
+                                                            <i class="bi bi-lock-fill me-1"></i>Registre contratados antes de capturar
+                                                        </small>
+                                                    `}
                                                 </div>
 
                                                 <!-- Input de Observaciones -->
@@ -370,7 +403,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                    `).join('')}
+                                    `}).join('')}
                                 </div>
 
                                 <div class="card-footer bg-white p-3 p-md-4 border-top d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3">
@@ -417,6 +450,7 @@
                     btnGuardar.disabled = true;
                     btnGuardarText.textContent = 'Guardando...';
 
+                    let errorPlantilla = null;
                     let errorExceso = null;
                     const items = [];
                     inputsCantidad.forEach(inp => {
@@ -430,7 +464,11 @@
                             const cantVal = parseInt(rawVal, 10);
                             const maxVal = parseInt(inp.getAttribute('data-max'), 10) || 0;
                             const nombre = inp.getAttribute('data-nombre') || 'un puesto';
-                            if (maxVal > 0 && cantVal > maxVal && !errorExceso) {
+                            const requierePlantilla = inp.getAttribute('data-requiere-plantilla') === 'true';
+
+                            if (requierePlantilla && !errorPlantilla) {
+                                errorPlantilla = `El puesto "${nombre}" está activo pero tiene su plantilla de personal contratado en 0. Debe registrar la cantidad de personal contratado en la sección de Plantilla antes de capturar la asistencia.`;
+                            } else if (maxVal > 0 && cantVal > maxVal && !errorExceso) {
                                 errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${maxVal} personas. La cantidad ingresada (${cantVal}) sobrepasa dicho límite.`;
                             }
 
@@ -443,6 +481,25 @@
                             });
                         }
                     });
+
+                    if (errorPlantilla) {
+                        Swal.fire({
+                            title: 'Plantilla de Personal Requerida',
+                            text: errorPlantilla,
+                            icon: 'warning',
+                            confirmButtonColor: '#860063',
+                            showCancelButton: true,
+                            confirmButtonText: '<i class="bi bi-people-fill me-1"></i> Ir a Definir Plantilla',
+                            cancelButtonText: 'Regresar'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                window.location.href = `/plantilla.html?areaId=${data.selectedAreaId}`;
+                            }
+                        });
+                        btnGuardar.disabled = false;
+                        btnGuardarText.textContent = 'Guardar Asistencia';
+                        return;
+                    }
 
                     if (errorExceso) {
                         Swal.fire({

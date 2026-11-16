@@ -139,6 +139,23 @@
                             <input type="hidden" name="id_ubicacion" value="<%= selectedUbicacionId %>">
                         <% } %>
 
+                        <% const haySinPlantilla = puestos.some(p => p.cantidad_contratada <= 0); %>
+                        <% if (haySinPlantilla) { %>
+                            <div class="alert alert-warning border-warning d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 m-3 mb-0 shadow-sm">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+                                    <div>
+                                        <strong class="d-block text-dark">Puestos con Plantilla en 0</strong>
+                                        <small class="text-muted">Los puestos activos deben tener registrada su dotación de personal contratado antes de poder capturar su asistencia.</small>
+                                    </div>
+                                </div>
+                                <a href="/puestos/plantilla?areaId=<%= selectedAreaId %>" class="btn btn-warning text-dark fw-bold btn-sm text-nowrap d-flex align-items-center gap-1 shadow-sm">
+                                    <i class="bi bi-people-fill"></i>
+                                    <span>Registrar Plantilla Contratada</span>
+                                </a>
+                            </div>
+                        <% } %>
+
                         <!-- Lista de Puestos -->
                         <div class="puestos-container">
                             <% puestos.forEach(function(p, index) { %>
@@ -153,6 +170,13 @@
                                                         <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.72rem;" title="Personal contratado/autorizado">
                                                             <i class="bi bi-people me-1"></i>Contratados: <%= p.cantidad_contratada %>
                                                         </span>
+                                                    <% } else { %>
+                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.72rem;" title="Plantilla en 0: Obligatorio registrar personal contratado">
+                                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Requiere Plantilla (0 contratados)
+                                                        </span>
+                                                        <a href="/puestos/plantilla?areaId=<%= selectedAreaId %>" class="badge bg-warning text-dark text-decoration-none border border-warning" style="font-size: 0.7rem;" title="Definir personal contratado">
+                                                            <i class="bi bi-pencil-square me-1"></i>Asignar
+                                                        </a>
                                                     <% } %>
                                                     <% if (p.aplica_turnos) { %>
                                                         <span class="badge bg-<%= p.turno_badge %>-subtle text-dark border border-<%= p.turno_badge %>-subtle" style="font-size: 0.72rem;">
@@ -191,21 +215,26 @@
                                                     <i class="bi bi-people"></i>
                                                 </span>
                                                 <input type="number" 
-                                                       class="form-control input-cantidad fw-bold text-center fs-5 <%= !p.editable ? 'bg-light text-muted' : '' %>" 
+                                                       class="form-control input-cantidad fw-bold text-center fs-5 <%= !p.editable ? 'bg-light text-muted' : '' %> <%= p.cantidad_contratada <= 0 ? 'border-danger-subtle bg-danger-subtle text-danger' : '' %>" 
                                                        name="puestos[<%= p.key %>][cantidad]" 
                                                        value="<%= p.cantidad_asistentes %>" 
                                                        min="0" 
-                                                       max="<%= p.cantidad_contratada > 0 ? p.cantidad_contratada : 500 %>" 
+                                                       max="<%= p.cantidad_contratada > 0 ? p.cantidad_contratada : 0 %>" 
                                                        step="1"
-                                                       placeholder=""
+                                                       placeholder="<%= p.cantidad_contratada <= 0 ? 'Plantilla 0' : '' %>"
                                                        data-key="<%= p.key %>"
                                                        data-nombre="<%= p.puesto_nombre %>"
                                                        data-max="<%= p.cantidad_contratada || 0 %>"
+                                                       data-requiere-plantilla="<%= p.cantidad_contratada <= 0 ? 'true' : 'false' %>"
                                                        <%= !p.editable ? 'readonly' : '' %>>
                                             </div>
                                             <% if (p.cantidad_contratada > 0) { %>
                                                 <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
                                                     Máximo permitido: <strong><%= p.cantidad_contratada %></strong>
+                                                </small>
+                                            <% } else { %>
+                                                <small class="text-danger fw-semibold d-block text-center mt-1" style="font-size: 0.7rem;">
+                                                    <i class="bi bi-lock-fill me-1"></i>Registre contratados antes de capturar
                                                 </small>
                                             <% } %>
                                             <input type="hidden" name="puestos[<%= p.key %>][id_puesto]" value="<%= p.id_puesto %>">
@@ -284,19 +313,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (formGuardar) {
         formGuardar.addEventListener('submit', (e) => {
             let algunValor = false;
+            let errorPlantilla = null;
             let errorExceso = null;
 
             inputsCantidad.forEach(inp => {
-                if (!inp.readOnly && inp.value.trim() !== '') {
+                if (!inp.readOnly && !inp.disabled && inp.value.trim() !== '') {
                     algunValor = true;
                     const val = parseInt(inp.value.trim(), 10);
                     const max = parseInt(inp.getAttribute('data-max'), 10) || 0;
                     const nombre = inp.getAttribute('data-nombre') || 'un puesto';
-                    if (max > 0 && val > max && !errorExceso) {
+                    const requierePlantilla = inp.getAttribute('data-requiere-plantilla') === 'true';
+
+                    if (requierePlantilla && !errorPlantilla) {
+                        errorPlantilla = `El puesto "${nombre}" está activo pero tiene su plantilla de personal contratado en 0. Por normativa del sistema, debe registrar la cantidad de personal contratado en la sección de Plantilla antes de capturar la asistencia.`;
+                    } else if (max > 0 && val > max && !errorExceso) {
                         errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${max} personas. La cantidad ingresada (${val}) sobrepasa dicho límite.`;
                     }
                 }
             });
+
+            if (errorPlantilla) {
+                e.preventDefault();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: 'Plantilla de Personal Requerida',
+                        text: errorPlantilla,
+                        icon: 'warning',
+                        confirmButtonColor: '#860063',
+                        showCancelButton: true,
+                        confirmButtonText: '<i class="bi bi-people-fill me-1"></i> Ir a Definir Plantilla',
+                        cancelButtonText: 'Regresar'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            window.location.href = `/puestos/plantilla?areaId=<%= selectedAreaId %>`;
+                        }
+                    });
+                } else {
+                    alert(errorPlantilla);
+                }
+                return;
+            }
 
             if (errorExceso) {
                 e.preventDefault();

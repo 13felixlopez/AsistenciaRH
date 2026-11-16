@@ -2,6 +2,16 @@ const { query } = require('../config/db');
 const { getUserAllowedAreas, hasAreaAccess, getUserAllowedLocations, hasLocationAccess, isSoloVistaUser } = require('../middlewares/auth');
 const { autocompletarAsistenciasPasadas, getLocalDateStr } = require('../services/asistenciaService');
 
+// Normalizar identificador de turno
+function normalizeTurno(t) {
+    if (!t) return 'UNICO';
+    const s = String(t).toUpperCase().trim();
+    if (s === 'TURNO 1' || s === 'TURNO_1' || s === '1') return 'TURNO_1';
+    if (s === 'TURNO 2' || s === 'TURNO_2' || s === '2') return 'TURNO_2';
+    if (s === 'UNICO' || s === 'TURNO UNICO' || s === 'TURNO_UNICO') return 'UNICO';
+    return s.replace(/\s+/g, '_');
+}
+
 // Obtener datos para formulario de registro diario en formato JSON
 async function showRegistroForm(req, res) {
     const user = req.user || req.session.user;
@@ -86,7 +96,8 @@ async function showRegistroForm(req, res) {
                         p.nombre AS puesto_nombre, 
                         p.descripcion AS puesto_descripcion,
                         COALESCE(p.aplica_turnos, 0) AS aplica_turnos,
-                        COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada
+                        COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada,
+                        COALESCE(p.activo, 1) AS activo
                     FROM Puestos p
                     WHERE p.id_area = ? AND p.activo = 1
                     ORDER BY p.nombre ASC
@@ -121,11 +132,15 @@ async function showRegistroForm(req, res) {
 
                 const asistsMap = {};
                 for (const a of asistenciasRes.recordset) {
-                    asistsMap[`${a.id_puesto}_${a.turno}`] = a;
+                    const tNorm = normalizeTurno(a.turno);
+                    asistsMap[`${a.id_puesto}_${tNorm}`] = a;
                 }
 
                 for (const p of puestosRes.recordset) {
-                    const turnosConfig = (p.aplica_turnos === 1 || p.aplica_turnos === true)
+                    const cantContratada = parseInt(p.cantidad_contratada, 10) || 0;
+                    const requierePlantilla = cantContratada <= 0;
+
+                    const turnosConfig = (p.aplica_turnos === 1 || p.aplica_turnos === true || p.aplica_turnos === '1')
                         ? [
                             { turno: 'TURNO_1', label: 'Turno 1', badgeClass: 'warning', icon: 'sun' },
                             { turno: 'TURNO_2', label: 'Turno 2', badgeClass: 'info', icon: 'moon' }
@@ -138,7 +153,7 @@ async function showRegistroForm(req, res) {
                         const key = `${p.id_puesto}_${t.turno}`;
                         const asis = asistsMap[key] || null;
                         const guardado = !!asis;
-                        const editable = isAdmin || !guardado;
+                        const editable = (isAdmin || !guardado) && !requierePlantilla;
 
                         slotsConAsistencia.push({
                             key,
@@ -146,7 +161,8 @@ async function showRegistroForm(req, res) {
                             puesto_nombre: p.puesto_nombre,
                             puesto_descripcion: p.puesto_descripcion,
                             aplica_turnos: p.aplica_turnos,
-                            cantidad_contratada: p.cantidad_contratada || 0,
+                            cantidad_contratada: cantContratada,
+                            requiere_plantilla: requierePlantilla,
                             turno: t.turno,
                             turno_label: t.label,
                             turno_badge: t.badgeClass,
@@ -231,13 +247,39 @@ async function saveAsistencias(req, res) {
             }
         }
 
-        if (!items || !Array.isArray(items) || items.length === 0) {
+        // Normalizar items recibidos
+        let itemsList = [];
+        if (Array.isArray(items)) {
+            itemsList = items;
+        } else if (typeof items === 'string') {
+            try { itemsList = JSON.parse(items); } catch(e) { itemsList = []; }
+        } else if (items && typeof items === 'object') {
+            itemsList = Object.keys(items).map(k => {
+                const parts = k.split('_');
+                const itm = items[k];
+                return {
+                    id_puesto: parseInt(parts[0], 10),
+                    turno: parts.slice(1).join('_') || 'UNICO',
+                    cantidad: (itm !== null && typeof itm === 'object' && itm.cantidad !== undefined) ? itm.cantidad : itm,
+                    observaciones: (itm && itm.observaciones) ? itm.observaciones : ''
+                };
+            });
+        } else if (req.body.puestos && typeof req.body.puestos === 'object') {
+            itemsList = Object.values(req.body.puestos).map(p => ({
+                id_puesto: parseInt(p.id_puesto, 10),
+                turno: normalizeTurno(p.turno),
+                cantidad: (p.cantidad !== undefined && p.cantidad !== null) ? String(p.cantidad).trim() : '',
+                observaciones: p.observaciones ? String(p.observaciones).trim() : ''
+            }));
+        }
+
+        if (itemsList.length === 0) {
             return res.status(400).json({ success: false, message: 'No se recibieron datos de puestos para guardar.' });
         }
 
-        // Obtener dotación contratada de los puestos del área para validar topes
+        // Obtener dotación contratada y estado de los puestos del área para validar
         const puestosInfoRes = await query(
-            'SELECT id_puesto, nombre, COALESCE(cantidad_contratada, 0) AS cantidad_contratada FROM Puestos WHERE id_area = ?',
+            'SELECT id_puesto, nombre, COALESCE(activo, 1) AS activo, COALESCE(cantidad_contratada, 0) AS cantidad_contratada FROM Puestos WHERE id_area = ?',
             [areaIdNum]
         );
         const mapaContratados = new Map();
@@ -247,9 +289,9 @@ async function saveAsistencias(req, res) {
         let actualizados = 0;
         let ignoradosPorSupervisor = 0;
 
-        for (const item of items) {
+        for (const item of itemsList) {
             const puestoId = parseInt(item.id_puesto, 10);
-            const turnoVal = (item.turno || 'UNICO').toUpperCase();
+            const turnoVal = normalizeTurno(item.turno);
 
             if (!puestoId) continue;
 
@@ -261,18 +303,34 @@ async function saveAsistencias(req, res) {
 
             // Validación estricta contra la plantilla contratada
             const infoPuesto = mapaContratados.get(puestoId);
-            if (infoPuesto && infoPuesto.cantidad_contratada > 0 && cantidadVal > infoPuesto.cantidad_contratada) {
-                return res.status(400).json({
-                    success: false,
-                    message: `La cantidad de asistentes (${cantidadVal}) excede la plantilla contratada (${infoPuesto.cantidad_contratada}) autorizada para el puesto "${infoPuesto.nombre}".`
-                });
+            if (infoPuesto) {
+                const esActivo = (infoPuesto.activo === 1 || infoPuesto.activo === true || infoPuesto.activo === '1');
+                const contratada = parseInt(infoPuesto.cantidad_contratada, 10) || 0;
+
+                // REGLA 1: Puesto activo con plantilla en 0 -> OBLIGAR a registrar cantidad contratada antes de registrar asistencia
+                if (esActivo && contratada === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `El puesto "${infoPuesto.nombre}" está activo pero tiene plantilla de personal contratado en 0. Debe registrar la cantidad de personal por cargo en la sección de Plantilla antes de capturar la asistencia.`
+                    });
+                }
+
+                // REGLA 2: Puesto activo con plantilla > 0 -> asistencia no puede ser mayor al número contratado
+                if (esActivo && contratada > 0 && cantidadVal > contratada) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `La cantidad de asistentes (${cantidadVal}) excede la plantilla contratada (${contratada}) autorizada para el puesto "${infoPuesto.nombre}".`
+                    });
+                }
+
+                // REGLA 3: Puesto inactivo con plantilla en 0 -> permitido
             }
 
-            const observacionesVal = item.observaciones ? item.observaciones.trim() : null;
+            const observacionesVal = item.observaciones ? String(item.observaciones).trim() : null;
 
-            // Verificar si ya existe registro
-            let checkSql = 'SELECT id_asistencia FROM Asistencias_Diarias WHERE fecha = ? AND id_puesto = ? AND turno = ?';
-            const checkParams = [fecha, puestoId, turnoVal];
+            // Verificar si ya existe registro contemplando estandarización de turno
+            let checkSql = 'SELECT id_asistencia FROM Asistencias_Diarias WHERE fecha = ? AND id_puesto = ? AND (turno = ? OR REPLACE(UPPER(turno), " ", "_") = ?)';
+            const checkParams = [fecha, puestoId, turnoVal, turnoVal];
 
             if (ubicacionIdNum) {
                 checkSql += ' AND id_ubicacion = ?';
@@ -469,7 +527,12 @@ async function corregirAsistencia(req, res) {
 
     try {
         const asisRes = await query(`
-            SELECT ad.id_asistencia, ad.id_puesto, p.nombre AS puesto_nombre, COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada
+            SELECT 
+                ad.id_asistencia, 
+                ad.id_puesto, 
+                p.nombre AS puesto_nombre, 
+                COALESCE(p.activo, 1) AS activo,
+                COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada
             FROM Asistencias_Diarias ad
             INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
             WHERE ad.id_asistencia = ?
@@ -480,10 +543,20 @@ async function corregirAsistencia(req, res) {
         }
 
         const registro = asisRes.recordset[0];
-        if (registro.cantidad_contratada > 0 && nuevaCantidad > registro.cantidad_contratada) {
+        const esActivo = (registro.activo === 1 || registro.activo === true || registro.activo === '1');
+        const contratada = parseInt(registro.cantidad_contratada, 10) || 0;
+
+        if (esActivo && contratada === 0) {
             return res.status(400).json({
                 success: false,
-                message: `La cantidad corregida (${nuevaCantidad}) supera la plantilla contratada (${registro.cantidad_contratada}) autorizada para "${registro.puesto_nombre}".`
+                message: `No se puede guardar: El puesto "${registro.puesto_nombre}" está activo pero tiene plantilla contratada en 0. Debe registrar la cantidad de personal contratado antes de registrar la asistencia.`
+            });
+        }
+
+        if (esActivo && contratada > 0 && nuevaCantidad > contratada) {
+            return res.status(400).json({
+                success: false,
+                message: `La cantidad corregida (${nuevaCantidad}) supera la plantilla contratada (${contratada}) autorizada para "${registro.puesto_nombre}".`
             });
         }
 

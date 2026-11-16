@@ -51,6 +51,18 @@ async function verifyAndMigrateTurso() {
                     await client.execute("ALTER TABLE Asistencias_Diarias ADD COLUMN fecha_modificacion TEXT");
                     console.log('✅ Columna fecha_modificacion agregada exitosamente en Turso DB.');
                 }
+
+                // 3. Limpiar índices obsoletos que pudieran impedir el Turno 2
+                await client.execute("DROP INDEX IF EXISTS UQ_Fecha_Puesto");
+                await client.execute("DROP INDEX IF EXISTS UQ_Fecha_Puesto_Turno");
+
+                // Estandarizar valores de turnos existentes
+                await client.execute("UPDATE Asistencias_Diarias SET turno = 'TURNO_1' WHERE turno = 'TURNO 1' OR turno = 'Turno 1'");
+                await client.execute("UPDATE Asistencias_Diarias SET turno = 'TURNO_2' WHERE turno = 'TURNO 2' OR turno = 'Turno 2'");
+                await client.execute("UPDATE Asistencias_Diarias SET turno = 'UNICO' WHERE turno IS NULL OR turno = '' OR turno = 'TURNO UNICO'");
+
+                // Asegurar índice único por (fecha, id_puesto, turno, id_ubicacion)
+                await client.execute("CREATE UNIQUE INDEX IF NOT EXISTS UQ_Asistencia_Slot ON Asistencias_Diarias (fecha, id_puesto, turno, COALESCE(id_ubicacion, 0))");
             }
         }
 
