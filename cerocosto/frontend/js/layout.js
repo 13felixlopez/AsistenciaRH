@@ -69,6 +69,12 @@ function initAppLayout(activeKey = '') {
                                 <span>Registrar Asistencia</span>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="/plantilla.html" class="nav-link text-secondary d-flex align-items-center gap-2 py-2 ${activeKey === 'plantilla' ? 'active' : ''}">
+                                <i class="bi bi-people-fill text-primary"></i>
+                                <span>Plantilla de Personal</span>
+                            </a>
+                        </li>
                     ` : ''}
 
                     <li class="nav-item">

@@ -23,13 +23,15 @@ async function showRegistroForm(req, res) {
     let selectedUbicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
     const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
 
-    // Restricción estricta: Solo se puede capturar la asistencia del día actual
-    if (req.query.fecha && req.query.fecha !== hoyStr) {
-        req.flash('error', `El registro de asistencia está habilitado exclusivamente para el día actual (${hoyStr}). Para consultar fechas pasadas, dirígete al Historial o Reportes.`);
-        return res.redirect(`/asistencias/registro${selectedAreaId ? '?areaId=' + selectedAreaId : ''}`);
+    // Restricción: Supervisores solo día actual, Administradores pueden consultar y registrar cualquier fecha
+    let selectedDate = hoyStr;
+    if (req.query.fecha) {
+        if (!isAdmin && req.query.fecha !== hoyStr) {
+            req.flash('error', `El registro de asistencia para supervisores está habilitado exclusivamente para el día actual (${hoyStr}). Para consultar fechas pasadas, dirígete al Historial.`);
+            return res.redirect(`/asistencias/registro${selectedAreaId ? '?areaId=' + selectedAreaId : ''}`);
+        }
+        selectedDate = req.query.fecha;
     }
-
-    const selectedDate = hoyStr;
 
     try {
         const pool = await getPool();
@@ -70,12 +72,10 @@ async function showRegistroForm(req, res) {
 
             // Si el área tiene ubicaciones:
             if (ubicacionesDisponibles.length > 0) {
-                // Si solo hay una ubicación permitida y no se especificó otra, preseleccionarla
                 if (!selectedUbicacionId && ubicacionesDisponibles.length === 1) {
                     selectedUbicacionId = ubicacionesDisponibles[0].id_ubicacion;
                 }
 
-                // Si se especificó una ubicación, validar acceso
                 if (selectedUbicacionId) {
                     const tieneAccesoUb = await hasLocationAccess(user.id_usuario, user.rol_codigo, selectedAreaId, selectedUbicacionId);
                     if (!tieneAccesoUb) {
@@ -85,17 +85,13 @@ async function showRegistroForm(req, res) {
                     ubicacionSeleccionadaInfo = ubicacionesDisponibles.find(u => u.id_ubicacion === selectedUbicacionId) || null;
                 }
             } else {
-                // El área no maneja ubicaciones desglosadas
                 selectedUbicacionId = null;
             }
 
-            // Solo cargamos puestos y asistencias si:
-            // 1) El área NO tiene ubicaciones creadas, O
-            // 2) El área SÍ tiene ubicaciones y ya se seleccionó una ubicación específica válida.
             const debeCargarPuestos = (ubicacionesDisponibles.length === 0) || Boolean(selectedUbicacionId);
 
             if (debeCargarPuestos) {
-                // 1. Obtener todos los puestos activos del área
+                // 1. Obtener todos los puestos activos del área incluyendo cantidad_contratada
                 const puestosRes = await pool.request()
                     .input('areaId', sql.Int, selectedAreaId)
                     .query(`
@@ -103,7 +99,8 @@ async function showRegistroForm(req, res) {
                             p.id_puesto,
                             p.nombre AS puesto_nombre,
                             p.descripcion AS puesto_descripcion,
-                            ISNULL(p.aplica_turnos, 0) AS aplica_turnos
+                            ISNULL(p.aplica_turnos, 0) AS aplica_turnos,
+                            ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada
                         FROM Puestos p
                         WHERE p.id_area = @areaId AND p.activo = 1
                         ORDER BY p.nombre ASC
@@ -171,6 +168,7 @@ async function showRegistroForm(req, res) {
                             puesto_nombre: p.puesto_nombre,
                             puesto_descripcion: p.puesto_descripcion,
                             aplica_turnos: p.aplica_turnos,
+                            cantidad_contratada: p.cantidad_contratada || 0,
                             turno: t.turno,
                             turno_label: t.label,
                             turno_badge: t.badgeClass,
@@ -233,8 +231,8 @@ async function saveAsistencias(req, res) {
     const areaIdNum = parseInt(id_area, 10);
     const ubicacionIdNum = id_ubicacion ? parseInt(id_ubicacion, 10) : null;
 
-    // Validación bloqueante: solo se permite capturar asistencia del día actual
-    if (fecha !== hoyStr) {
+    // Validación: supervisores solo pueden registrar el día actual; Admin puede registrar y corregir cualquier fecha
+    if (!isAdmin && fecha !== hoyStr) {
         const errorMsg = `Acción rechazada: Solo está permitido registrar asistencias para el día de hoy (${hoyStr}). Fechas pasadas y futuras no pueden registrarse.`;
         if (req.xhr || req.headers.accept?.includes('json')) {
             return res.status(400).json({ success: false, message: errorMsg });
@@ -264,6 +262,15 @@ async function saveAsistencias(req, res) {
         await transaction.begin();
 
         try {
+            // Obtener metadatos de puestos para validar que la cantidad no sobrepase cantidad_contratada
+            const puestosMetaRes = await new sql.Request(transaction)
+                .input('areaId', sql.Int, areaIdNum)
+                .query('SELECT id_puesto, nombre, ISNULL(cantidad_contratada, 0) AS cantidad_contratada FROM Puestos WHERE id_area = @areaId');
+            const puestosMap = {};
+            for (const p of puestosMetaRes.recordset) {
+                puestosMap[p.id_puesto] = p;
+            }
+
             // Parsear lista de items
             let listaItems = [];
             if (Array.isArray(items)) {
@@ -290,6 +297,15 @@ async function saveAsistencias(req, res) {
                 const obs = item.observaciones && item.observaciones.length > 0 ? item.observaciones : null;
 
                 if (isNaN(idPuesto)) continue;
+
+                // Validar contra cantidad_contratada si viene número
+                if (rawCantidad !== '') {
+                    const cantNum = parseInt(rawCantidad, 10);
+                    const pMeta = puestosMap[idPuesto];
+                    if (pMeta && pMeta.cantidad_contratada > 0 && cantNum > pMeta.cantidad_contratada) {
+                        throw new Error(`El puesto "${pMeta.nombre}" tiene una plantilla contratada de ${pMeta.cantidad_contratada} personas. La cantidad ingresada (${cantNum}) sobrepasa dicho límite.`);
+                    }
+                }
 
                 // Verificar existencia previa por (fecha, puesto, turno, ubicacion)
                 let checkQuery = `
@@ -397,14 +413,89 @@ async function saveAsistencias(req, res) {
     } catch (err) {
         console.error('Error al guardar asistencias:', err);
         if (req.xhr || req.headers.accept?.includes('json')) {
-            return res.status(500).json({ success: false, message: 'Error interno al guardar: ' + err.message });
+            return res.status(400).json({ success: false, message: 'Error al guardar: ' + err.message });
         }
-        req.flash('error', 'Error al guardar las asistencias: ' + err.message);
-        res.redirect(`/asistencias/registro?fecha=${fecha}&areaId=${id_area}`);
+        req.flash('error', 'Error al guardar asistencias: ' + err.message);
+        res.redirect(`/asistencias/registro?areaId=${id_area}`);
     }
 }
 
-// Historial y consulta de asistencias con filtro por Ubicación
+// Corregir un registro individual de asistencia (Exclusivo para Administrador)
+async function corregirAsistencia(req, res) {
+    const user = req.session.user;
+    const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
+    if (!isAdmin) {
+        return res.status(403).json({ success: false, message: 'Acceso denegado: Solo los usuarios con rol Administrador pueden corregir asistencias grabadas.' });
+    }
+
+    const { id_asistencia, cantidad_asistentes, observaciones } = req.body;
+    if (!id_asistencia || cantidad_asistentes === undefined || cantidad_asistentes === null || isNaN(cantidad_asistentes)) {
+        return res.status(400).json({ success: false, message: 'Se requiere un ID de asistencia y una cantidad numérica válida.' });
+    }
+
+    const cantNum = parseInt(cantidad_asistentes, 10);
+    if (cantNum < 0) {
+        return res.status(400).json({ success: false, message: 'La cantidad de personas no puede ser negativa.' });
+    }
+
+    try {
+        const pool = await getPool();
+
+        // Validar puesto y su plantilla contratada
+        const asisRes = await pool.request()
+            .input('id', sql.Int, parseInt(id_asistencia, 10))
+            .query(`
+                SELECT 
+                    ad.id_asistencia,
+                    ad.id_puesto,
+                    ad.cantidad_asistentes,
+                    p.nombre AS puesto_nombre,
+                    ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada
+                FROM Asistencias_Diarias ad
+                INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
+                WHERE ad.id_asistencia = @id
+            `);
+
+        if (asisRes.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'Registro de asistencia no encontrado.' });
+        }
+
+        const asis = asisRes.recordset[0];
+        if (asis.cantidad_contratada > 0 && cantNum > asis.cantidad_contratada) {
+            return res.status(400).json({
+                success: false,
+                message: `No se puede guardar: El puesto "${asis.puesto_nombre}" tiene un tope de personal contratado de ${asis.cantidad_contratada}. La cantidad ingresada (${cantNum}) lo sobrepasa.`
+            });
+        }
+
+        await pool.request()
+            .input('id', sql.Int, parseInt(id_asistencia, 10))
+            .input('cantidad', sql.Int, cantNum)
+            .input('obs', sql.NVarChar, observaciones ? String(observaciones).trim() : null)
+            .input('userId', sql.Int, user.id_usuario)
+            .query(`
+                UPDATE Asistencias_Diarias
+                SET cantidad_asistentes = @cantidad,
+                    observaciones = @obs,
+                    id_usuario_modificacion = @userId,
+                    fecha_modificacion = GETDATE()
+                WHERE id_asistencia = @id
+            `);
+
+        const msg = `Asistencia para "${asis.puesto_nombre}" corregida exitosamente a ${cantNum} asistentes.`;
+        if (req.xhr || req.headers.accept?.includes('json')) {
+            return res.json({ success: true, message: msg });
+        }
+
+        req.flash('success', msg);
+        res.redirect(req.headers.referer || '/asistencias/historial');
+    } catch (err) {
+        console.error('Error al corregir asistencia:', err);
+        return res.status(500).json({ success: false, message: 'Error interno al corregir asistencia: ' + err.message });
+    }
+}
+
+// Historial detallado de asistencias
 async function listHistorial(req, res) {
     const user = req.session.user;
     const pool = await getPool();
@@ -418,6 +509,7 @@ async function listHistorial(req, res) {
     const fechaFin = req.query.fechaFin || hoy.toISOString().split('T')[0];
     const areaId = req.query.areaId ? parseInt(req.query.areaId, 10) : null;
     const ubicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
+    const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
 
     try {
         const allowedAreas = await getUserAllowedAreas(user.id_usuario, user.rol_codigo);
@@ -429,13 +521,11 @@ async function listHistorial(req, res) {
 
         if (areaIds.length > 0) {
             let filterAreas = areaId ? [areaId] : areaIds;
-            // Validar que el área filtrada esté permitida
             if (areaId && !areaIds.includes(areaId)) {
                 req.flash('error', 'No tienes permiso para consultar el área seleccionada.');
                 return res.redirect('/asistencias/historial');
             }
 
-            // Si se seleccionó un área, obtener sus ubicaciones para el filtro
             if (areaId) {
                 ubicacionesFiltro = await getUserAllowedLocations(user.id_usuario, user.rol_codigo, areaId);
             }
@@ -455,6 +545,7 @@ async function listHistorial(req, res) {
                     ad.fecha_modificacion,
                     p.id_puesto,
                     p.nombre AS puesto_nombre,
+                    ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
                     ar.id_area,
                     ar.nombre AS area_nombre,
                     ar.codigo AS area_codigo,
@@ -481,8 +572,7 @@ async function listHistorial(req, res) {
                 reqHist.input('ubId', sql.Int, ubicacionId);
             }
 
-            // Si el usuario no es admin, filtrar para que solo vea las ubicaciones a las que tiene acceso si el área tiene ubicaciones
-            if (user.rol_codigo !== 'ADMIN') {
+            if (!isAdmin) {
                 query += `
                     AND (
                         ad.id_ubicacion IS NULL 
@@ -510,12 +600,13 @@ async function listHistorial(req, res) {
             fechaFin,
             selectedAreaId: areaId,
             selectedUbicacionId: ubicacionId,
+            isAdmin,
             error: req.flash('error'),
             success: req.flash('success')
         });
     } catch (err) {
         console.error('Error al listar historial:', err);
-        req.flash('error', 'Error al cargar el historial.');
+        req.flash('error', 'Error al cargar el historial: ' + err.message);
         res.redirect('/dashboard');
     }
 }
@@ -523,5 +614,6 @@ async function listHistorial(req, res) {
 module.exports = {
     showRegistroForm,
     saveAsistencias,
+    corregirAsistencia,
     listHistorial
 };

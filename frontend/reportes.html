@@ -132,13 +132,13 @@
 
                     <!-- Resumen Estadístico de Reportes -->
                     <div class="row g-3 mb-4" id="statsReporteRow">
-                        <div class="col-sm-6 col-lg-4">
+                        <div class="col-sm-6 col-lg-3">
                             <div class="card shadow-sm border-0 stat-card">
                                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                                     <div>
-                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Total Asistencias</span>
-                                        <h3 class="fw-bold my-1 text-dark" id="statReporteTotal">-</h3>
-                                        <small class="text-primary"><i class="bi bi-people-fill me-1"></i> Personas en el periodo</small>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">Total Asistieron</span>
+                                        <h3 class="fw-bold my-1 text-primary" id="statReporteTotal">-</h3>
+                                        <small class="text-muted"><i class="bi bi-people-fill me-1"></i> Asistencia real</small>
                                     </div>
                                     <div class="stat-icon bg-primary-subtle text-primary">
                                         <i class="bi bi-person-check-fill"></i>
@@ -147,31 +147,46 @@
                             </div>
                         </div>
 
-                        <div class="col-sm-6 col-lg-4">
-                            <div class="card shadow-sm border-0 stat-card stat-success">
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card shadow-sm border-0 stat-card stat-teal">
                                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                                     <div>
-                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Promedio Diario</span>
-                                        <h3 class="fw-bold my-1 text-dark" id="statReportePromedio">-</h3>
-                                        <small class="text-success"><i class="bi bi-calculator me-1"></i> Asistentes por día</small>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">Plantilla Contratada</span>
+                                        <h3 class="fw-bold my-1 text-teal" id="statReporteContratada">-</h3>
+                                        <small class="text-muted"><i class="bi bi-briefcase-fill me-1"></i> Dotación autorizada</small>
                                     </div>
-                                    <div class="stat-icon bg-success-subtle text-success">
-                                        <i class="bi bi-graph-up-arrow"></i>
+                                    <div class="stat-icon bg-teal-subtle text-teal">
+                                        <i class="bi bi-briefcase"></i>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="col-sm-12 col-lg-4">
-                            <div class="card shadow-sm border-0 stat-card stat-warning">
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card shadow-sm border-0 stat-card stat-danger">
                                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                                     <div>
-                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.75rem;">Puestos / Áreas Evaluados</span>
-                                        <h3 class="fw-bold my-1 text-dark" id="statReportePuestos">-</h3>
-                                        <small class="text-warning"><i class="bi bi-briefcase me-1"></i> Con registros activos</small>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">Faltantes / Ausencias</span>
+                                        <h3 class="fw-bold my-1 text-danger" id="statReporteFaltantes">-</h3>
+                                        <small class="text-muted"><i class="bi bi-person-dash-fill me-1"></i> Ausentismo real</small>
                                     </div>
-                                    <div class="stat-icon bg-warning-subtle text-warning">
-                                        <i class="bi bi-card-checklist"></i>
+                                    <div class="stat-icon bg-danger-subtle text-danger">
+                                        <i class="bi bi-person-x-fill"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-sm-6 col-lg-3">
+                            <div class="card shadow-sm border-0 stat-card stat-success">
+                                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">% Cobertura Real</span>
+                                        <h3 class="fw-bold my-1 text-success" id="statReporteCobertura">-</h3>
+                                        <small class="text-muted"><i class="bi bi-patch-check-fill me-1"></i> Cumplimiento de dotación</small>
+                                    </div>
+                                    <div class="stat-icon bg-success-subtle text-success">
+                                        <i class="bi bi-graph-up-arrow"></i>
                                     </div>
                                 </div>
                             </div>
@@ -344,8 +359,9 @@
 
                     // Actualizar Tarjetas KPI
                     document.getElementById('statReporteTotal').textContent = `${data.totales ? data.totales.personas : 0} pers.`;
-                    document.getElementById('statReportePromedio').textContent = `${data.totales ? data.totales.promedioDiario : 0} pers/día`;
-                    document.getElementById('statReportePuestos').textContent = `${data.totales ? data.totales.totalPuestos : 0}`;
+                    document.getElementById('statReporteContratada').textContent = `${data.totales ? data.totales.totalContratados : 0} pers.`;
+                    document.getElementById('statReporteFaltantes').textContent = `${data.totales ? data.totales.faltantes : 0} pers.`;
+                    document.getElementById('statReporteCobertura').textContent = `${data.totales ? data.totales.porcentajeCobertura : 100}%`;
 
                     // Renderizar Gráfica Chart.js
                     renderGrafica(data);
@@ -416,9 +432,11 @@
                                 <tr>
                                     <th class="ps-4">Área Operativa</th>
                                     <th class="text-center">Total Puestos</th>
+                                    <th class="text-center">Plantilla Contratada</th>
                                     <th class="text-center">Días con Registros</th>
                                     <th class="text-center">Total Asistencias</th>
-                                    <th class="pe-4 text-end">Promedio por Puesto</th>
+                                    <th class="text-center">Promedio por Puesto</th>
+                                    <th class="pe-4 text-end">% Cumplimiento</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -428,9 +446,17 @@
                                             <i class="bi bi-building me-1 text-primary"></i> ${item.area_nombre} (${item.area_codigo})
                                         </td>
                                         <td class="text-center">${item.total_puestos}</td>
+                                        <td class="text-center"><span class="badge bg-light text-teal border fw-bold fs-6">${item.total_contratados || 0} pers.</span></td>
                                         <td class="text-center"><span class="badge bg-light text-dark border">${item.dias_con_registro} días</span></td>
-                                        <td class="text-center"><span class="badge bg-success px-3 py-2 fs-6">${item.total_asistencias} pers.</span></td>
-                                        <td class="pe-4 text-end text-muted">${Number(item.promedio_por_puesto).toFixed(1)} pers.</td>
+                                        <td class="text-center"><span class="badge bg-primary px-3 py-2 fs-6 fw-bold">${item.total_asistencias} pers.</span></td>
+                                        <td class="text-center text-muted">${Number(item.promedio_por_puesto).toFixed(1)} pers.</td>
+                                        <td class="pe-4 text-end">
+                                            ${item.cobertura !== null ? `
+                                                <span class="badge ${item.cobertura >= 100 ? 'bg-success-subtle text-success border border-success-subtle' : (item.cobertura >= 80 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle')} px-2 py-1 fw-bold">
+                                                    ${item.cobertura}%
+                                                </span>
+                                            ` : '<span class="text-muted">-</span>'}
+                                        </td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -445,7 +471,10 @@
                                     <th>Ubicación</th>
                                     <th>Puesto</th>
                                     <th>Turno</th>
+                                    <th class="text-center">Plantilla Contratada</th>
                                     <th class="text-center">Asistentes</th>
+                                    <th class="text-center">Faltantes / Ausencias</th>
+                                    <th class="text-center">% Cobertura</th>
                                     <th>Registrado Por</th>
                                     <th class="pe-4 text-end">Hora Registro</th>
                                 </tr>
@@ -457,8 +486,26 @@
                                         <td>${item.ubicacion_nombre ? `<span class="badge bg-warning-subtle text-dark border border-warning-subtle small">${item.ubicacion_nombre}</span>` : '<span class="text-muted small">General</span>'}</td>
                                         <td class="fw-semibold text-secondary">${item.puesto_nombre}</td>
                                         <td><span class="badge bg-light text-dark border">${item.turno}</span></td>
-                                        <td class="text-center"><span class="badge bg-success px-3 py-2 fs-6">${item.cantidad_asistentes} pers.</span></td>
-                                        <td class="small text-muted"><i class="bi bi-person me-1"></i>${item.usuario_registro || '-'}</td>
+                                        <td class="text-center">
+                                            <span class="badge bg-light text-teal border fw-bold fs-6">${item.cantidad_contratada || 0}</span>
+                                        </td>
+                                        <td class="text-center"><span class="badge ${item.cantidad_asistentes > 0 ? 'bg-success' : 'bg-secondary'} px-3 py-2 fs-6 fw-bold">${item.cantidad_asistentes}</span></td>
+                                        <td class="text-center">
+                                            ${item.faltantes > 0 ? `
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold fs-6">
+                                                    <i class="bi bi-arrow-down-circle me-1"></i>${item.faltantes}
+                                                </span>
+                                            ` : '<span class="badge bg-light text-success border px-2 py-1 fw-semibold">0</span>'}
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="d-flex align-items-center justify-content-center gap-2">
+                                                <div class="progress flex-grow-1" style="max-width: 60px; height: 6px;">
+                                                    <div class="progress-bar ${item.cobertura >= 100 ? 'bg-success' : (item.cobertura >= 80 ? 'bg-warning' : 'bg-danger')}" style="width: ${Math.min(100, item.cobertura)}%;"></div>
+                                                </div>
+                                                <span class="small fw-bold ${item.cobertura >= 100 ? 'text-success' : (item.cobertura >= 80 ? 'text-warning-emphasis' : 'text-danger')}">${item.cobertura}%</span>
+                                            </div>
+                                        </td>
+                                        <td class="small text-muted"><i class="bi bi-person me-1"></i>${item.usuario_registro || item.registrado_por || '-'}</td>
                                         <td class="pe-4 text-end small text-muted"><i class="bi bi-clock me-1"></i>${item.hora_registro_texto || '-'}</td>
                                     </tr>
                                 `).join('')}
@@ -473,10 +520,11 @@
                                 <tr>
                                     <th class="ps-4">Área</th>
                                     <th>Puesto de Trabajo</th>
-                                    <th>Turno</th>
+                                    <th class="text-center">Plantilla Contratada</th>
                                     <th class="text-center">Días Registrados</th>
                                     <th class="text-center">Total Asistencias</th>
-                                    <th class="pe-4 text-end">Promedio Diario</th>
+                                    <th class="text-center">Promedio Diario</th>
+                                    <th class="pe-4 text-end">% Cumplimiento</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -484,10 +532,19 @@
                                     <tr>
                                         <td class="ps-4 fw-semibold text-dark">${item.area_nombre}</td>
                                         <td class="fw-bold text-secondary">${item.puesto_nombre}</td>
-                                        <td><span class="badge bg-light text-dark border">${item.turno}</span></td>
+                                        <td class="text-center">
+                                            <span class="badge bg-light text-teal border fw-bold fs-6">${item.cantidad_contratada ? item.cantidad_contratada + ' pers.' : 'No def.'}</span>
+                                        </td>
                                         <td class="text-center"><span class="badge bg-light text-dark border">${item.dias_registrados} días</span></td>
-                                        <td class="text-center"><span class="badge bg-success px-3 py-2 fs-6">${item.total_asistencias} pers.</span></td>
-                                        <td class="pe-4 text-end text-muted">${Number(item.promedio_diario).toFixed(1)} pers/día</td>
+                                        <td class="text-center"><span class="badge bg-success px-3 py-2 fs-6 fw-bold">${item.total_asistencias} pers.</span></td>
+                                        <td class="text-center text-muted">${Number(item.promedio_diario).toFixed(1)} pers/día</td>
+                                        <td class="pe-4 text-end">
+                                            ${item.cobertura !== null ? `
+                                                <span class="badge ${item.cobertura >= 100 ? 'bg-success-subtle text-success border border-success-subtle' : (item.cobertura >= 80 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle')} px-2 py-1 fw-bold">
+                                                    ${item.cobertura}%
+                                                </span>
+                                            ` : '<span class="text-muted">-</span>'}
+                                        </td>
                                     </tr>
                                 `).join('')}
                             </tbody>

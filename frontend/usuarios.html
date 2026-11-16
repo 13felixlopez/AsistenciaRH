@@ -241,6 +241,11 @@
                                                 <i class="bi bi-${u.activo ? 'person-x' : 'person-check'}"></i>
                                             </button>
                                         ` : ''}
+                                        ${!isSelf && u.usuario !== 'admin' ? `
+                                            <button type="button" class="btn btn-outline-danger btn-delete-usr" data-id="${u.id_usuario}" data-name="${u.nombre}" title="Eliminar usuario">
+                                                <i class="bi bi-trash3"></i>
+                                            </button>
+                                        ` : ''}
                                     </div>
                                 </td>
                             </tr>
@@ -270,6 +275,35 @@
                                         const resT = await api.post(`/usuarios/toggle/${uId}`);
                                         if (resT.success) {
                                             showToast('success', resT.message);
+                                            cargarUsuarios();
+                                        }
+                                    } catch (err) {
+                                        Swal.fire('Error', err.message, 'error');
+                                    }
+                                }
+                            });
+                        });
+                    });
+
+                    document.querySelectorAll('.btn-delete-usr').forEach(b => {
+                        b.addEventListener('click', () => {
+                            const uId = b.getAttribute('data-id');
+                            const uName = b.getAttribute('data-name');
+                            Swal.fire({
+                                title: '¿Eliminar usuario?',
+                                text: `¿Está seguro de eliminar al usuario '${uName}'? Si posee asistencias previas registradas se desactivará y revocarán sus permisos para salvaguardar la trazabilidad histórica.`,
+                                icon: 'warning',
+                                showCancelButton: true,
+                                confirmButtonColor: '#D83548',
+                                cancelButtonColor: '#6c757d',
+                                confirmButtonText: 'Sí, eliminar',
+                                cancelButtonText: 'Cancelar'
+                            }).then(async r => {
+                                if (r.isConfirmed) {
+                                    try {
+                                        const resD = await api.post(`/usuarios/eliminar/${uId}`);
+                                        if (resD.success) {
+                                            showToast('success', resD.message);
                                             cargarUsuarios();
                                         }
                                     } catch (err) {

@@ -139,13 +139,25 @@
                     const params = [];
                     if (currentAreaId) params.push(`areaId=${currentAreaId}`);
                     if (currentUbicacionId) params.push(`ubicacionId=${currentUbicacionId}`);
+                    if (fechaInput.value && !fechaInput.readOnly) params.push(`fecha=${fechaInput.value}`);
                     if (params.length > 0) endpoint += '?' + params.join('&');
 
                     const res = await api.get(endpoint);
                     if (!res.success || !res.data) return;
 
                     const data = res.data;
-                    fechaInput.value = data.hoy;
+                    fechaInput.value = data.selectedDate || data.hoy;
+
+                    if (data.isAdmin) {
+                        fechaInput.readOnly = false;
+                        fechaInput.classList.remove('bg-light');
+                        fechaInput.removeAttribute('min');
+                        fechaInput.removeAttribute('tabindex');
+                    } else {
+                        fechaInput.readOnly = true;
+                        fechaInput.classList.add('bg-light');
+                        fechaInput.value = data.hoy;
+                    }
 
                     // Poblar áreas asignadas
                     const areasList = data.areas || [];
@@ -285,6 +297,11 @@
                                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
                                                         <div class="d-flex align-items-center gap-2">
                                                             <span class="fw-bold text-dark fs-6">${p.puesto_nombre}</span>
+                                                            ${p.cantidad_contratada > 0 ? `
+                                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.72rem;" title="Personal contratado/autorizado">
+                                                                    <i class="bi bi-people me-1"></i>Contratados: ${p.cantidad_contratada}
+                                                                </span>
+                                                            ` : ''}
                                                             ${p.aplica_turnos ? `
                                                                 <span class="badge bg-${p.turno_badge}-subtle text-dark border border-${p.turno_badge}-subtle" style="font-size: 0.72rem;">
                                                                     ${p.turno_icon ? `<i class="bi bi-${p.turno_icon}-fill text-${p.turno_badge} me-1"></i>` : ''}
@@ -307,7 +324,7 @@
                                                     ${p.puesto_descripcion ? `<small class="text-muted d-block mt-1" style="font-size: 0.75rem;">${p.puesto_descripcion}</small>` : ''}
                                                     ${p.registrado_por ? `
                                                         <small class="text-muted d-block" style="font-size: 0.7rem;">
-                                                            <i class="bi bi-person me-1"></i> Por: ${p.registrado_por}
+                                                             Por: ${p.registrado_por}
                                                         </small>
                                                     ` : ''}
                                                 </div>
@@ -322,14 +339,21 @@
                                                         <input type="number" 
                                                                class="form-control input-cantidad fw-bold text-center fs-5 ${!p.editable ? 'bg-light text-muted' : ''}" 
                                                                data-puesto-id="${p.id_puesto}"
+                                                               data-nombre="${p.puesto_nombre}"
+                                                               data-max="${p.cantidad_contratada || 0}"
                                                                data-turno="${p.turno}"
                                                                value="${(p.cantidad_asistentes !== '' && p.cantidad_asistentes !== null && p.cantidad_asistentes !== undefined) ? p.cantidad_asistentes : ''}" 
                                                                min="0" 
-                                                               max="500" 
+                                                               max="${p.cantidad_contratada > 0 ? p.cantidad_contratada : 500}" 
                                                                step="1"
                                                                placeholder=""
                                                                ${!p.editable ? 'readonly' : ''}>
                                                     </div>
+                                                    ${p.cantidad_contratada > 0 ? `
+                                                        <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
+                                                            Máximo permitido: <strong>${p.cantidad_contratada}</strong>
+                                                        </small>
+                                                    ` : ''}
                                                 </div>
 
                                                 <!-- Input de Observaciones -->
@@ -393,6 +417,7 @@
                     btnGuardar.disabled = true;
                     btnGuardarText.textContent = 'Guardando...';
 
+                    let errorExceso = null;
                     const items = [];
                     inputsCantidad.forEach(inp => {
                         // Si el usuario no es admin y el puesto ya está registrado/bloqueado, omitir
@@ -402,15 +427,34 @@
                         const turno = inp.getAttribute('data-turno');
                         const rawVal = inp.value.trim();
                         if (rawVal !== '') {
+                            const cantVal = parseInt(rawVal, 10);
+                            const maxVal = parseInt(inp.getAttribute('data-max'), 10) || 0;
+                            const nombre = inp.getAttribute('data-nombre') || 'un puesto';
+                            if (maxVal > 0 && cantVal > maxVal && !errorExceso) {
+                                errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${maxVal} personas. La cantidad ingresada (${cantVal}) sobrepasa dicho límite.`;
+                            }
+
                             const obsInp = captureContainer.querySelector(`.input-observaciones[data-puesto-id="${idPuesto}"][data-turno="${turno}"]`);
                             items.push({
                                 id_puesto: idPuesto,
                                 turno: turno,
-                                cantidad: parseInt(rawVal, 10),
+                                cantidad: cantVal,
                                 observaciones: obsInp ? obsInp.value.trim() : ''
                             });
                         }
                     });
+
+                    if (errorExceso) {
+                        Swal.fire({
+                            title: 'Límite de Personal Excedido',
+                            text: errorExceso,
+                            icon: 'warning',
+                            confirmButtonColor: '#D83548'
+                        });
+                        btnGuardar.disabled = false;
+                        btnGuardarText.textContent = 'Guardar Asistencia';
+                        return;
+                    }
 
                     if (items.length === 0) {
                         Swal.fire({
@@ -467,6 +511,12 @@
             selectUbicacion.addEventListener('change', () => {
                 currentUbicacionId = selectUbicacion.value ? parseInt(selectUbicacion.value, 10) : null;
                 loadJornadaData();
+            });
+
+            fechaInput.addEventListener('change', () => {
+                if (!fechaInput.readOnly) {
+                    loadJornadaData();
+                }
             });
 
             btnCargarJornada.addEventListener('click', () => {

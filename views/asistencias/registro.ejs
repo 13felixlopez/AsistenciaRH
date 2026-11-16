@@ -27,14 +27,11 @@
                         <i class="bi bi-calendar3"></i>
                     </span>
                     <input type="date" 
-                           class="form-control form-control-lg fs-6 border-start-0 bg-light" 
+                           class="form-control form-control-lg fs-6 border-start-0 <%= !isAdmin ? 'bg-light' : '' %>" 
                            id="fecha" 
                            name="fecha" 
-                           value="<%= hoy %>" 
-                           min="<%= hoy %>" 
-                           max="<%= hoy %>" 
-                           readonly 
-                           tabindex="-1">
+                           value="<%= selectedDate %>" 
+                           <%= !isAdmin ? 'min="' + hoy + '" max="' + hoy + '" readonly tabindex="-1"' : 'onchange="this.form.submit()"' %>>
                 </div>
             </div>
 
@@ -152,6 +149,11 @@
                                             <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
                                                 <div class="d-flex align-items-center gap-2">
                                                     <span class="fw-bold text-dark fs-6"><%= p.puesto_nombre %></span>
+                                                    <% if (p.cantidad_contratada > 0) { %>
+                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 0.72rem;" title="Personal contratado/autorizado">
+                                                            <i class="bi bi-people me-1"></i>Contratados: <%= p.cantidad_contratada %>
+                                                        </span>
+                                                    <% } %>
                                                     <% if (p.aplica_turnos) { %>
                                                         <span class="badge bg-<%= p.turno_badge %>-subtle text-dark border border-<%= p.turno_badge %>-subtle" style="font-size: 0.72rem;">
                                                             <% if (p.turno_icon) { %><i class="bi bi-<%= p.turno_icon %>-fill text-<%= p.turno_badge %> me-1"></i><% } %>
@@ -193,12 +195,19 @@
                                                        name="puestos[<%= p.key %>][cantidad]" 
                                                        value="<%= p.cantidad_asistentes %>" 
                                                        min="0" 
-                                                       max="500" 
+                                                       max="<%= p.cantidad_contratada > 0 ? p.cantidad_contratada : 500 %>" 
                                                        step="1"
                                                        placeholder=""
                                                        data-key="<%= p.key %>"
+                                                       data-nombre="<%= p.puesto_nombre %>"
+                                                       data-max="<%= p.cantidad_contratada || 0 %>"
                                                        <%= !p.editable ? 'readonly' : '' %>>
                                             </div>
+                                            <% if (p.cantidad_contratada > 0) { %>
+                                                <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
+                                                    Máximo permitido: <strong><%= p.cantidad_contratada %></strong>
+                                                </small>
+                                            <% } %>
                                             <input type="hidden" name="puestos[<%= p.key %>][id_puesto]" value="<%= p.id_puesto %>">
                                             <input type="hidden" name="puestos[<%= p.key %>][turno]" value="<%= p.turno %>">
                                         </div>
@@ -275,11 +284,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if (formGuardar) {
         formGuardar.addEventListener('submit', (e) => {
             let algunValor = false;
+            let errorExceso = null;
+
             inputsCantidad.forEach(inp => {
                 if (!inp.readOnly && inp.value.trim() !== '') {
                     algunValor = true;
+                    const val = parseInt(inp.value.trim(), 10);
+                    const max = parseInt(inp.getAttribute('data-max'), 10) || 0;
+                    const nombre = inp.getAttribute('data-nombre') || 'un puesto';
+                    if (max > 0 && val > max && !errorExceso) {
+                        errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${max} personas. La cantidad ingresada (${val}) sobrepasa dicho límite.`;
+                    }
                 }
             });
+
+            if (errorExceso) {
+                e.preventDefault();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: 'Límite de Personal Excedido',
+                        text: errorExceso,
+                        icon: 'warning',
+                        confirmButtonColor: '#D83548'
+                    });
+                } else {
+                    alert(errorExceso);
+                }
+                return;
+            }
 
             if (!algunValor) {
                 e.preventDefault();

@@ -11,5 +11,6 @@ router.post('/nuevo', usuarioController.createUser);
 router.get('/editar/:id', usuarioController.showEditUser);
 router.post('/editar/:id', usuarioController.updateUser);
 router.post('/toggle/:id', usuarioController.toggleUserStatus);
+router.post('/eliminar/:id', usuarioController.deleteUser);
 
 module.exports = router;

@@ -12,7 +12,7 @@ function getLocalDateStr(d = new Date()) {
 
 // Obtener datos para formulario de registro diario en formato JSON
 async function showRegistroForm(req, res) {
-    const user = req.user || req.session.user;
+    const user = req.user || (req.session && req.session.user);
     if (isSoloVistaUser(user)) {
         return res.status(403).json({
             success: false,
@@ -25,15 +25,17 @@ async function showRegistroForm(req, res) {
     let selectedUbicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
     const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
 
-    // Restricción estricta: Solo se puede capturar la asistencia del día actual
-    if (req.query.fecha && req.query.fecha !== hoyStr) {
-        return res.status(400).json({
-            success: false,
-            message: `El registro de asistencia está habilitado exclusivamente para el día actual (${hoyStr}). Para consultar fechas pasadas, dirígete al Historial o Reportes.`
-        });
+    // Restricción: Supervisores solo día actual, Administradores pueden registrar y corregir cualquier fecha
+    let selectedDate = hoyStr;
+    if (req.query.fecha) {
+        if (!isAdmin && req.query.fecha !== hoyStr) {
+            return res.status(400).json({
+                success: false,
+                message: `El registro de asistencia para supervisores está habilitado exclusivamente para el día actual (${hoyStr}). Para consultar fechas pasadas, dirígete al Historial.`
+            });
+        }
+        selectedDate = req.query.fecha;
     }
-
-    const selectedDate = hoyStr;
 
     try {
         const pool = await getPool();
@@ -96,7 +98,7 @@ async function showRegistroForm(req, res) {
             const debeCargarPuestos = (ubicacionesDisponibles.length === 0) || Boolean(selectedUbicacionId);
 
             if (debeCargarPuestos) {
-                // 1. Obtener todos los puestos activos del área
+                // 1. Obtener todos los puestos activos del área con cantidad_contratada
                 const puestosRes = await pool.request()
                     .input('areaId', sql.Int, selectedAreaId)
                     .query(`
@@ -104,17 +106,19 @@ async function showRegistroForm(req, res) {
                             p.id_puesto,
                             p.nombre AS puesto_nombre,
                             p.descripcion AS puesto_descripcion,
-                            ISNULL(p.aplica_turnos, 0) AS aplica_turnos
+                            ISNULL(p.aplica_turnos, 0) AS aplica_turnos,
+                            ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada
                         FROM Puestos p
                         WHERE p.id_area = @areaId AND p.activo = 1
                         ORDER BY p.nombre ASC
                     `);
 
-                // 2. Obtener asistencias ya registradas hoy para este puesto/área/ubicación
-                let asistenciasQuery = `
+                // 2. Obtener asistencias ya registradas en esa fecha, área y ubicación específica
+                let queryAsistencias = `
                     SELECT 
                         ad.id_asistencia,
                         ad.id_puesto,
+                        ad.id_ubicacion,
                         ISNULL(ad.turno, 'UNICO') AS turno,
                         ad.cantidad_asistentes,
                         ad.observaciones,
@@ -133,24 +137,23 @@ async function showRegistroForm(req, res) {
                     .input('fecha', sql.Date, selectedDate);
 
                 if (selectedUbicacionId) {
-                    asistenciasQuery += ' AND ad.id_ubicacion = @ubId';
-                    reqAsist.input('ubId', sql.Int, selectedUbicacionId);
+                    queryAsistencias += ' AND ad.id_ubicacion = @ubicacionId';
+                    reqAsist.input('ubicacionId', sql.Int, selectedUbicacionId);
                 } else {
-                    asistenciasQuery += ' AND ad.id_ubicacion IS NULL';
+                    queryAsistencias += ' AND (ad.id_ubicacion IS NULL OR ad.id_ubicacion = 0)';
                 }
 
-                const asistenciasRes = await reqAsist.query(asistenciasQuery);
+                const asistenciasRes = await reqAsist.query(queryAsistencias);
 
-                // Mapear asistencias existentes por [id_puesto + '_' + turno]
+                // Mapeo rápido de asistencias por [id_puesto_turno]
                 const asistsMap = {};
-                for (const asis of asistenciasRes.recordset) {
-                    const key = `${asis.id_puesto}_${asis.turno}`;
-                    asistsMap[key] = asis;
+                for (const a of asistenciasRes.recordset) {
+                    asistsMap[`${a.id_puesto}_${a.turno}`] = a;
                 }
 
-                // Generar slots de puestos y turnos
+                // 3. Estructurar cada slot por puesto y turno
                 for (const p of puestosRes.recordset) {
-                    const turnosConfig = p.aplica_turnos
+                    const turnosConfig = (p.aplica_turnos === 1 || p.aplica_turnos === true)
                         ? [
                             { turno: 'TURNO_1', label: 'Turno 1 (Día)', badgeClass: 'warning text-dark', icon: 'bi-sun-fill' },
                             { turno: 'TURNO_2', label: 'Turno 2 (Noche)', badgeClass: 'primary', icon: 'bi-moon-stars-fill' }
@@ -171,6 +174,7 @@ async function showRegistroForm(req, res) {
                             puesto_nombre: p.puesto_nombre,
                             puesto_descripcion: p.puesto_descripcion,
                             aplica_turnos: p.aplica_turnos,
+                            cantidad_contratada: p.cantidad_contratada || 0,
                             turno: t.turno,
                             turno_label: t.label,
                             turno_badge: t.badgeClass,
@@ -216,7 +220,7 @@ async function showRegistroForm(req, res) {
 
 // Guardar asistencias masivas por puestos del área en una fecha y ubicación
 async function saveAsistencias(req, res) {
-    const user = req.user || req.session.user;
+    const user = req.user || (req.session && req.session.user);
     if (isSoloVistaUser(user)) {
         return res.status(403).json({
             success: false,
@@ -235,11 +239,11 @@ async function saveAsistencias(req, res) {
     const areaIdNum = parseInt(id_area, 10);
     const ubicacionIdNum = id_ubicacion ? parseInt(id_ubicacion, 10) : null;
 
-    // Validación: solo se permite capturar asistencia del día actual
-    if (fecha !== hoyStr) {
+    // Validación: supervisores solo día actual, admin cualquier día
+    if (!isAdmin && fecha !== hoyStr) {
         return res.status(400).json({
             success: false,
-            message: `Acción rechazada: Solo está permitido registrar asistencias para el día de hoy (${hoyStr}).`
+            message: `Acción rechazada: Los supervisores solo pueden capturar asistencia del día de hoy (${hoyStr}).`
         });
     }
 
@@ -259,28 +263,37 @@ async function saveAsistencias(req, res) {
             }
         }
 
-        // Si items viene como objeto o string (ej. body form-urlencoded), normalizarlo a array
-        let itemsArray = [];
-        if (Array.isArray(items)) {
-            itemsArray = items;
-        } else if (items && typeof items === 'object') {
-            itemsArray = Object.keys(items).map(key => {
-                const parts = key.split('_');
-                const idPuesto = parseInt(parts[0], 10);
-                const turno = parts.slice(1).join('_') || 'UNICO';
-                return {
-                    id_puesto: idPuesto,
-                    turno,
-                    cantidad: items[key].cantidad !== undefined ? items[key].cantidad : items[key],
-                    observaciones: items[key].observaciones || ''
-                };
-            });
-        }
-
         const transaction = new sql.Transaction(pool);
         await transaction.begin();
 
         try {
+            // Obtener metadatos de puestos para validar que la cantidad no sobrepase cantidad_contratada
+            const puestosMetaRes = await new sql.Request(transaction)
+                .input('areaId', sql.Int, areaIdNum)
+                .query('SELECT id_puesto, nombre, ISNULL(cantidad_contratada, 0) AS cantidad_contratada FROM Puestos WHERE id_area = @areaId');
+            const puestosMap = {};
+            for (const p of puestosMetaRes.recordset) {
+                puestosMap[p.id_puesto] = p;
+            }
+
+            // Si items viene como objeto o string, normalizarlo a array
+            let itemsArray = [];
+            if (Array.isArray(items)) {
+                itemsArray = items;
+            } else if (items && typeof items === 'object') {
+                itemsArray = Object.keys(items).map(key => {
+                    const parts = key.split('_');
+                    const idPuesto = parseInt(parts[0], 10);
+                    const turno = parts.slice(1).join('_') || 'UNICO';
+                    return {
+                        id_puesto: idPuesto,
+                        turno,
+                        cantidad: items[key].cantidad !== undefined ? items[key].cantidad : items[key],
+                        observaciones: items[key].observaciones || ''
+                    };
+                });
+            }
+
             let totalProcesados = 0;
 
             for (const item of itemsArray) {
@@ -294,6 +307,12 @@ async function saveAsistencias(req, res) {
 
                 const cantidad = parseInt(rawCantidad, 10);
                 if (cantidad < 0) continue;
+
+                // Validar contra cantidad_contratada
+                const pMeta = puestosMap[idPuesto];
+                if (pMeta && pMeta.cantidad_contratada > 0 && cantidad > pMeta.cantidad_contratada) {
+                    throw new Error(`El puesto "${pMeta.nombre}" tiene un tope de personal contratado de ${pMeta.cantidad_contratada} personas. La cantidad ingresada (${cantidad}) sobrepasa dicho límite.`);
+                }
 
                 const observaciones = item.observaciones ? String(item.observaciones).trim() : null;
 
@@ -313,7 +332,7 @@ async function saveAsistencias(req, res) {
                     checkQuery += ' AND id_ubicacion = @ubId';
                     checkReq.input('ubId', sql.Int, ubicacionIdNum);
                 } else {
-                    checkQuery += ' AND id_ubicacion IS NULL';
+                    checkQuery += ' AND (id_ubicacion IS NULL OR id_ubicacion = 0)';
                 }
 
                 const existingRes = await checkReq.query(checkQuery);
@@ -374,19 +393,104 @@ async function saveAsistencias(req, res) {
             throw trxError;
         }
     } catch (err) {
-        console.error('Error al guardar asistencias:', err);
-        return res.status(500).json({
+        console.error('Error al guardar asistencias en API:', err);
+        return res.status(400).json({
             success: false,
-            message: 'Error al guardar las asistencias: ' + err.message
+            message: 'Error al procesar registros de asistencia: ' + err.message
         });
     }
 }
 
-// Historial y consulta de asistencias con filtro por Ubicación en JSON
+// Corregir un registro individual de asistencia (Exclusivo para Administrador)
+async function corregirAsistencia(req, res) {
+    const user = req.user || (req.session && req.session.user);
+    const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
+    if (!isAdmin) {
+        return res.status(403).json({
+            success: false,
+            message: 'Acceso denegado: Solo los usuarios con rol Administrador pueden corregir asistencias grabadas.'
+        });
+    }
+
+    const { id_asistencia, cantidad_asistentes, observaciones } = req.body;
+    if (!id_asistencia || cantidad_asistentes === undefined || cantidad_asistentes === null || isNaN(cantidad_asistentes)) {
+        return res.status(400).json({
+            success: false,
+            message: 'Se requiere el ID de asistencia y una cantidad numérica válida.'
+        });
+    }
+
+    const cantNum = parseInt(cantidad_asistentes, 10);
+    if (cantNum < 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'La cantidad de personas no puede ser negativa.'
+        });
+    }
+
+    try {
+        const pool = await getPool();
+
+        // Validar puesto y su plantilla contratada
+        const asisRes = await pool.request()
+            .input('id', sql.Int, parseInt(id_asistencia, 10))
+            .query(`
+                SELECT 
+                    ad.id_asistencia,
+                    ad.id_puesto,
+                    ad.cantidad_asistentes,
+                    p.nombre AS puesto_nombre,
+                    ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada
+                FROM Asistencias_Diarias ad
+                INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
+                WHERE ad.id_asistencia = @id
+            `);
+
+        if (asisRes.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'Registro de asistencia no encontrado.' });
+        }
+
+        const asis = asisRes.recordset[0];
+        if (asis.cantidad_contratada > 0 && cantNum > asis.cantidad_contratada) {
+            return res.status(400).json({
+                success: false,
+                message: `No se puede guardar: El puesto "${asis.puesto_nombre}" tiene un tope de personal contratado de ${asis.cantidad_contratada}. La cantidad ingresada (${cantNum}) lo sobrepasa.`
+            });
+        }
+
+        await pool.request()
+            .input('id', sql.Int, parseInt(id_asistencia, 10))
+            .input('cantidad', sql.Int, cantNum)
+            .input('obs', sql.NVarChar, observaciones ? String(observaciones).trim() : null)
+            .input('userId', sql.Int, user.id_usuario)
+            .query(`
+                UPDATE Asistencias_Diarias
+                SET cantidad_asistentes = @cantidad,
+                    observaciones = @obs,
+                    id_usuario_modificacion = @userId,
+                    fecha_modificacion = GETDATE()
+                WHERE id_asistencia = @id
+            `);
+
+        return res.json({
+            success: true,
+            message: `Asistencia para "${asis.puesto_nombre}" corregida exitosamente a ${cantNum} asistentes.`
+        });
+    } catch (err) {
+        console.error('Error al corregir asistencia:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error interno al corregir asistencia: ' + err.message
+        });
+    }
+}
+
+// Historial detallado de asistencias
 async function listHistorial(req, res) {
-    const user = req.user || req.session.user;
+    const user = req.user || (req.session && req.session.user);
     const pool = await getPool();
 
+    // Fechas por defecto: últimos 7 días
     const hoy = new Date();
     const sieteDiasAtras = new Date();
     sieteDiasAtras.setDate(hoy.getDate() - 7);
@@ -395,6 +499,7 @@ async function listHistorial(req, res) {
     const fechaFin = req.query.fechaFin || hoy.toISOString().split('T')[0];
     const areaId = req.query.areaId ? parseInt(req.query.areaId, 10) : null;
     const ubicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
+    const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
 
     try {
         const allowedAreas = await getUserAllowedAreas(user.id_usuario, user.rol_codigo);
@@ -422,7 +527,7 @@ async function listHistorial(req, res) {
             let query = `
                 SELECT 
                     ad.id_asistencia,
-                    CONVERT(VARCHAR(10), ad.fecha, 120) AS fecha,
+                    ad.fecha,
                     ISNULL(ad.turno, 'UNICO') AS turno,
                     ad.cantidad_asistentes,
                     ad.observaciones,
@@ -432,6 +537,7 @@ async function listHistorial(req, res) {
                     ad.fecha_modificacion,
                     p.id_puesto,
                     p.nombre AS puesto_nombre,
+                    ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
                     ar.id_area,
                     ar.nombre AS area_nombre,
                     ar.codigo AS area_codigo,
@@ -454,11 +560,11 @@ async function listHistorial(req, res) {
                 .input('fechaFin', sql.Date, fechaFin);
 
             if (ubicacionId) {
-                query += ` AND ad.id_ubicacion = @ubId`;
+                query += ' AND ad.id_ubicacion = @ubId';
                 reqHist.input('ubId', sql.Int, ubicacionId);
             }
 
-            if (user.rol_codigo !== 'ADMIN') {
+            if (!isAdmin) {
                 query += `
                     AND (
                         ad.id_ubicacion IS NULL 
@@ -486,7 +592,8 @@ async function listHistorial(req, res) {
                 fechaInicio,
                 fechaFin,
                 selectedAreaId: areaId,
-                selectedUbicacionId: ubicacionId
+                selectedUbicacionId: ubicacionId,
+                isAdmin
             }
         });
     } catch (err) {
@@ -501,5 +608,6 @@ async function listHistorial(req, res) {
 module.exports = {
     showRegistroForm,
     saveAsistencias,
+    corregirAsistencia,
     listHistorial
 };

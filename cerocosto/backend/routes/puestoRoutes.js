@@ -6,6 +6,10 @@ const { isAuthenticated, isAdmin } = require('../middlewares/auth');
 router.use(isAuthenticated);
 
 router.get('/', puestoController.listPuestos);
+router.get('/plantilla', puestoController.showPlantilla);
+router.get('/plantilla/data', puestoController.getPlantillaData);
+router.get('/plantilla/data/:areaId', puestoController.getPlantillaData);
+router.post('/plantilla/guardar', puestoController.savePlantilla);
 router.get('/area/:areaId', puestoController.getPuestosByArea);
 router.get('/:id', puestoController.getPuestoById);
 router.post('/crear', isAdmin, puestoController.createPuesto);

@@ -13,6 +13,7 @@ async function listPuestos(req, res) {
                 p.nombre AS puesto_nombre,
                 p.descripcion AS puesto_descripcion,
                 COALESCE(p.aplica_turnos, 0) AS aplica_turnos,
+                COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada,
                 p.activo,
                 p.fecha_creacion,
                 a.id_area,
@@ -48,7 +49,7 @@ async function listPuestos(req, res) {
 
 // Crear puesto
 async function createPuesto(req, res) {
-    const { id_area, nombre, descripcion, aplica_turnos } = req.body;
+    const { id_area, nombre, descripcion, aplica_turnos, cantidad_contratada } = req.body;
 
     if (!id_area || !nombre) {
         return res.status(400).json({
@@ -58,6 +59,7 @@ async function createPuesto(req, res) {
     }
 
     const turnosBit = (aplica_turnos === '1' || aplica_turnos === 'true' || aplica_turnos === true || aplica_turnos === 'on') ? 1 : 0;
+    const contratadaVal = Math.max(0, parseInt(cantidad_contratada, 10) || 0);
 
     try {
         const check = await query('SELECT id_puesto FROM Puestos WHERE id_area = ? AND nombre = ?', [id_area, nombre.trim()]);
@@ -70,10 +72,10 @@ async function createPuesto(req, res) {
         }
 
         const insertRes = await query(`
-            INSERT INTO Puestos (id_area, nombre, descripcion, aplica_turnos, activo)
-            VALUES (?, ?, ?, ?, 1)
+            INSERT INTO Puestos (id_area, nombre, descripcion, aplica_turnos, cantidad_contratada, activo)
+            VALUES (?, ?, ?, ?, ?, 1)
             RETURNING id_puesto
-        `, [id_area, nombre.trim(), descripcion ? descripcion.trim() : null, turnosBit]);
+        `, [id_area, nombre.trim(), descripcion ? descripcion.trim() : null, turnosBit, contratadaVal]);
 
         return res.status(201).json({
             success: true,
@@ -84,14 +86,14 @@ async function createPuesto(req, res) {
         console.error('Error al crear puesto:', err);
         return res.status(500).json({
             success: false,
-            message: 'No se pudo crear el puesto.'
+            message: 'No se pudo crear el puesto: ' + err.message
         });
     }
 }
 
 // Editar puesto
 async function updatePuesto(req, res) {
-    const { id_puesto, id_area, nombre, descripcion, aplica_turnos, activo } = req.body;
+    const { id_puesto, id_area, nombre, descripcion, aplica_turnos, cantidad_contratada, activo } = req.body;
 
     if (!id_puesto || !id_area || !nombre) {
         return res.status(400).json({
@@ -101,6 +103,7 @@ async function updatePuesto(req, res) {
     }
 
     const turnosBit = (aplica_turnos === '1' || aplica_turnos === 'true' || aplica_turnos === true || aplica_turnos === 'on') ? 1 : 0;
+    const contratadaVal = Math.max(0, parseInt(cantidad_contratada, 10) || 0);
 
     try {
         const check = await query(
@@ -121,9 +124,10 @@ async function updatePuesto(req, res) {
                 nombre = ?,
                 descripcion = ?,
                 aplica_turnos = ?,
+                cantidad_contratada = ?,
                 activo = ?
             WHERE id_puesto = ?
-        `, [id_area, nombre.trim(), descripcion ? descripcion.trim() : null, turnosBit, activo ? 1 : 0, id_puesto]);
+        `, [id_area, nombre.trim(), descripcion ? descripcion.trim() : null, turnosBit, contratadaVal, activo ? 1 : 0, id_puesto]);
 
         return res.json({
             success: true,
@@ -133,7 +137,7 @@ async function updatePuesto(req, res) {
         console.error('Error al actualizar puesto:', err);
         return res.status(500).json({
             success: false,
-            message: 'No se pudo modificar el puesto.'
+            message: 'No se pudo modificar el puesto: ' + err.message
         });
     }
 }
@@ -172,7 +176,7 @@ async function getPuestosByArea(req, res) {
     const { areaId } = req.params;
     try {
         const result = await query(`
-            SELECT id_puesto, id_area, nombre, descripcion, COALESCE(aplica_turnos, 0) AS aplica_turnos, activo
+            SELECT id_puesto, id_area, nombre, descripcion, COALESCE(aplica_turnos, 0) AS aplica_turnos, COALESCE(cantidad_contratada, 0) AS cantidad_contratada, activo
             FROM Puestos
             WHERE id_area = ? AND activo = 1
             ORDER BY nombre ASC
@@ -189,7 +193,7 @@ async function getPuestoById(req, res) {
     const { id } = req.params;
     try {
         const result = await query(
-            'SELECT id_puesto, id_area, nombre, descripcion, COALESCE(aplica_turnos, 0) AS aplica_turnos, activo FROM Puestos WHERE id_puesto = ?',
+            'SELECT id_puesto, id_area, nombre, descripcion, COALESCE(aplica_turnos, 0) AS aplica_turnos, COALESCE(cantidad_contratada, 0) AS cantidad_contratada, activo FROM Puestos WHERE id_puesto = ?',
             [id]
         );
 
@@ -202,11 +206,134 @@ async function getPuestoById(req, res) {
     }
 }
 
+// API / SSR: Consulta de plantilla de personal por área
+async function showPlantilla(req, res) {
+    return res.json({ success: true, message: 'Endpoint de plantilla listo' });
+}
+
+// API: Obtener los puestos y dotación contratada de un área
+async function getPlantillaData(req, res) {
+    const areaId = req.params.areaId ? parseInt(req.params.areaId, 10) : (req.query.areaId ? parseInt(req.query.areaId, 10) : null);
+    const user = req.user || req.session.user;
+
+    try {
+        const { getUserAllowedAreas } = require('../middlewares/auth');
+        const allowedAreas = await getUserAllowedAreas(user.id_usuario, user.rol_codigo);
+        const areaIds = allowedAreas.map(a => a.id_area);
+
+        let selectedAreaId = areaId;
+        if (!selectedAreaId && allowedAreas.length > 0) {
+            selectedAreaId = allowedAreas[0].id_area;
+        }
+
+        if (selectedAreaId && user.rol_codigo !== 'ADMIN' && !areaIds.includes(selectedAreaId)) {
+            return res.status(403).json({
+                success: false,
+                message: 'No tienes permisos asignados para gestionar la plantilla del área seleccionada.'
+            });
+        }
+
+        let puestos = [];
+        let areaSeleccionada = null;
+        if (selectedAreaId) {
+            const areaRes = await query('SELECT id_area, nombre, codigo FROM Areas WHERE id_area = ?', [selectedAreaId]);
+            areaSeleccionada = areaRes.recordset[0] || null;
+
+            const puestosRes = await query(`
+                SELECT 
+                    p.id_puesto,
+                    p.id_area,
+                    p.nombre AS puesto_nombre,
+                    p.nombre,
+                    p.descripcion,
+                    COALESCE(p.aplica_turnos, 0) AS aplica_turnos,
+                    COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada,
+                    p.activo
+                FROM Puestos p
+                WHERE p.id_area = ? AND p.activo = 1
+                ORDER BY p.nombre ASC
+            `, [selectedAreaId]);
+            puestos = puestosRes.recordset;
+        }
+
+        const totalContratados = puestos.reduce((sum, p) => sum + (p.cantidad_contratada || 0), 0);
+
+        return res.json({
+            success: true,
+            areas: allowedAreas,
+            selectedAreaId,
+            areaSeleccionada,
+            puestos,
+            totalContratados
+        });
+    } catch (err) {
+        console.error('Error al obtener datos de plantilla:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al consultar la plantilla de personal: ' + err.message
+        });
+    }
+}
+
+// API: Guardar la dotación presupuestada/contratada de puestos
+async function savePlantilla(req, res) {
+    const user = req.user || req.session.user;
+    const { id_area, plantilla, puestos } = req.body;
+    const listado = plantilla || puestos;
+
+    if (!id_area || !listado || !Array.isArray(listado)) {
+        return res.status(400).json({
+            success: false,
+            message: 'Parámetros inválidos. Debe proporcionar el área y la plantilla de puestos.'
+        });
+    }
+
+    try {
+        const { getUserAllowedAreas } = require('../middlewares/auth');
+        const allowedAreas = await getUserAllowedAreas(user.id_usuario, user.rol_codigo);
+        const areaIds = allowedAreas.map(a => a.id_area);
+
+        if (user.rol_codigo !== 'ADMIN' && !areaIds.includes(parseInt(id_area, 10))) {
+            return res.status(403).json({
+                success: false,
+                message: 'No tienes autorización para modificar la plantilla de esta área.'
+            });
+        }
+
+        for (const item of listado) {
+            const idPuesto = parseInt(item.id_puesto, 10);
+            const cantidad = Math.max(0, parseInt(item.cantidad_contratada, 10) || 0);
+
+            if (idPuesto) {
+                await query(`
+                    UPDATE Puestos
+                    SET cantidad_contratada = ?
+                    WHERE id_puesto = ? AND id_area = ?
+                `, [cantidad, idPuesto, id_area]);
+            }
+        }
+
+        return res.json({
+            success: true,
+            message: 'Plantilla de personal contratado actualizada exitosamente.'
+        });
+    } catch (err) {
+        console.error('Error al guardar plantilla:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al guardar la plantilla en Turso: ' + err.message
+        });
+    }
+}
+
 module.exports = {
     listPuestos,
     createPuesto,
     updatePuesto,
     togglePuestoStatus,
     getPuestosByArea,
-    getPuestoById
+    getPuestoById,
+    showPlantilla,
+    getPlantillaData,
+    savePlantilla
 };

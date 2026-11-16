@@ -115,11 +115,13 @@ app.use((err, req, res, next) => {
 
 // Inicialización del Servidor y verificación de Base de Datos
 const { autocompletarAsistenciasPasadas } = require('./services/asistenciaService');
+const { runMigrationPlantilla } = require('./database/runMigrationPlantilla');
 
 async function startServer() {
     try {
         console.log('🔄 Conectando con Microsoft SQL Server...');
         await getPool();
+        await runMigrationPlantilla().catch(e => console.error('Error migración plantilla:', e.message));
         app.listen(PORT, () => {
             console.log('======================================================');
             console.log(`🚀 Servidor AsistenciaRH corriendo en: http://localhost:${PORT}`);

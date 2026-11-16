@@ -34,7 +34,7 @@ async function showReportes(req, res) {
         const areaIds = reportableAreas.map(a => a.id_area);
 
         let data = [];
-        let totales = { personas: 0, promedioDiario: 0, totalPuestos: 0 };
+        let totales = { personas: 0, promedioDiario: 0, totalPuestos: 0, totalContratados: 0, faltantes: 0, porcentajeCobertura: 100 };
         let chartData = { labels: [], datasets: [] };
         let chartDataPuestos = { labels: [], datasets: [] };
         let ubicacionesFiltro = [];
@@ -80,6 +80,7 @@ async function showReportes(req, res) {
                         ub.nombre AS ubicacion_nombre,
                         p.id_puesto,
                         p.nombre AS puesto_nombre,
+                        ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
                         ISNULL(p.aplica_turnos, 0) AS aplica_turnos,
                         ISNULL(ad.turno, 'UNICO') AS turno,
                         ISNULL(ad.cantidad_asistentes, 0) AS cantidad_asistentes,
@@ -120,9 +121,33 @@ async function showReportes(req, res) {
                 queryDiario += ` ORDER BY ar.nombre ASC, ub.nombre ASC, p.nombre ASC, ad.turno ASC`;
 
                 const result = await reqDiario.query(queryDiario);
-                data = result.recordset;
+                data = result.recordset.map(item => {
+                    const contratada = item.cantidad_contratada || 0;
+                    const asistentes = item.cantidad_asistentes || 0;
+                    const faltantes = contratada > 0 ? Math.max(0, contratada - asistentes) : 0;
+                    const cobertura = contratada > 0 ? Math.round((asistentes / contratada) * 100) : (asistentes > 0 ? 100 : 0);
+                    return {
+                        ...item,
+                        faltantes,
+                        cobertura
+                    };
+                });
+
                 totales.personas = data.reduce((sum, item) => sum + item.cantidad_asistentes, 0);
                 totales.totalPuestos = data.length;
+
+                // Contratados únicos para no duplicar si hay puestos en turnos
+                const puestosUnicos = new Map();
+                data.forEach(item => {
+                    if (!puestosUnicos.has(item.id_puesto)) {
+                        puestosUnicos.set(item.id_puesto, item.cantidad_contratada || 0);
+                    }
+                });
+                totales.totalContratados = Array.from(puestosUnicos.values()).reduce((sum, v) => sum + v, 0);
+                totales.faltantes = Math.max(0, totales.totalContratados - totales.personas);
+                totales.porcentajeCobertura = totales.totalContratados > 0 
+                    ? Math.round((totales.personas / totales.totalContratados) * 100) 
+                    : 100;
 
             } else if (tipoReporte === 'detalle_puesto') {
                 // Reporte acumulado por puesto en el rango con soporte de Ubicación y Puesto
@@ -132,6 +157,7 @@ async function showReportes(req, res) {
                         ar.nombre AS area_nombre,
                         p.id_puesto,
                         p.nombre AS puesto_nombre,
+                        ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
                         COUNT(DISTINCT ad.fecha) AS dias_registrados,
                         ISNULL(SUM(ad.cantidad_asistentes), 0) AS total_asistencias,
                         ISNULL(AVG(CAST(ad.cantidad_asistentes AS FLOAT)), 0) AS promedio_diario,
@@ -161,14 +187,30 @@ async function showReportes(req, res) {
                 }
 
                 queryDetalle += `
-                    GROUP BY ar.id_area, ar.nombre, p.id_puesto, p.nombre
+                    GROUP BY ar.id_area, ar.nombre, p.id_puesto, p.nombre, p.cantidad_contratada
                     ORDER BY total_asistencias DESC, p.nombre ASC
                 `;
 
                 const result = await reqDetalle.query(queryDetalle);
-                data = result.recordset;
+                data = result.recordset.map(item => {
+                    const contratada = item.cantidad_contratada || 0;
+                    const prom = Number(item.promedio_diario) || 0;
+                    const cobertura = contratada > 0 ? Math.round((prom / contratada) * 100) : null;
+                    return {
+                        ...item,
+                        cobertura
+                    };
+                });
+
                 totales.personas = data.reduce((sum, item) => sum + item.total_asistencias, 0);
                 totales.totalPuestos = data.length;
+                totales.totalContratados = data.reduce((sum, item) => sum + (item.cantidad_contratada || 0), 0);
+                const sumPromedioDiario = data.reduce((sum, item) => sum + Number(item.promedio_diario), 0);
+                totales.promedioDiario = Number(sumPromedioDiario.toFixed(1));
+                totales.faltantes = Math.max(0, Math.round(totales.totalContratados - totales.promedioDiario));
+                totales.porcentajeCobertura = totales.totalContratados > 0 
+                    ? Math.round((totales.promedioDiario / totales.totalContratados) * 100) 
+                    : 100;
 
                 // GRÁFICO DE COMPORTAMIENTO TEMPORAL POR PUESTOS
                 let queryChartPuestos = `
@@ -249,20 +291,46 @@ async function showReportes(req, res) {
                             ar.nombre AS area_nombre,
                             ar.codigo AS area_codigo,
                             COUNT(DISTINCT p.id_puesto) AS total_puestos,
+                            ISNULL(plantilla.total_contratados, 0) AS total_contratados,
                             COUNT(DISTINCT ad.fecha) AS dias_con_registro,
                             ISNULL(SUM(ad.cantidad_asistentes), 0) AS total_asistencias,
                             ISNULL(AVG(CAST(ad.cantidad_asistentes AS FLOAT)), 0) AS promedio_por_puesto
                         FROM Areas ar
                         INNER JOIN Puestos p ON ar.id_area = p.id_area AND p.activo = 1
+                        LEFT JOIN (
+                            SELECT id_area, SUM(ISNULL(cantidad_contratada, 0)) AS total_contratados
+                            FROM Puestos
+                            WHERE activo = 1
+                            GROUP BY id_area
+                        ) plantilla ON ar.id_area = plantilla.id_area
                         LEFT JOIN Asistencias_Diarias ad 
                             ON p.id_puesto = ad.id_puesto 
                             AND ad.fecha >= @inicio AND ad.fecha <= @fin
                         WHERE ar.id_area IN (${areaListStr})
-                        GROUP BY ar.id_area, ar.nombre, ar.codigo
+                        GROUP BY ar.id_area, ar.nombre, ar.codigo, plantilla.total_contratados
                         ORDER BY total_asistencias DESC
                     `);
-                data = result.recordset;
+                data = result.recordset.map(item => {
+                    const contratada = item.total_contratados || 0;
+                    const dias = item.dias_con_registro || 1;
+                    const promDiarioArea = dias > 0 ? (item.total_asistencias / dias) : 0;
+                    const cobertura = contratada > 0 ? Math.round((promDiarioArea / contratada) * 100) : null;
+                    return {
+                        ...item,
+                        promedio_diario_area: Number(promDiarioArea.toFixed(1)),
+                        cobertura
+                    };
+                });
+
                 totales.personas = data.reduce((sum, item) => sum + item.total_asistencias, 0);
+                totales.totalPuestos = data.reduce((sum, item) => sum + item.total_puestos, 0);
+                totales.totalContratados = data.reduce((sum, item) => sum + item.total_contratados, 0);
+                const sumPromedioDiarioAreas = data.reduce((sum, item) => sum + item.promedio_diario_area, 0);
+                totales.promedioDiario = Number(sumPromedioDiarioAreas.toFixed(1));
+                totales.faltantes = Math.max(0, Math.round(totales.totalContratados - totales.promedioDiario));
+                totales.porcentajeCobertura = totales.totalContratados > 0 
+                    ? Math.round((totales.promedioDiario / totales.totalContratados) * 100) 
+                    : 100;
 
                 // Gráfico por día y por área
                 const chartRes = await pool.request()
@@ -400,7 +468,7 @@ async function exportExcel(req, res) {
             worksheet.getCell('A3').value = `Filtro: Reporte Diario | Fecha: ${fechaDiario}`;
             worksheet.getCell('A3').font = { bold: true, size: 10 };
 
-            const headers = ['Área', 'Ubicación / Línea', 'Puesto de Trabajo', 'Modalidad / Turno', 'Cantidad Asistieron', 'Observaciones', 'Registrado Por', 'Hora Registro'];
+            const headers = ['Área', 'Ubicación / Línea', 'Puesto de Trabajo', 'Plantilla Contratada', 'Modalidad / Turno', 'Cantidad Asistieron', 'Faltantes / Ausentes', '% Cobertura', 'Observaciones', 'Registrado Por', 'Hora Registro'];
             const headerRow = worksheet.getRow(5);
             headerRow.values = headers;
             headerRow.eachCell(cell => {
@@ -415,6 +483,7 @@ async function exportExcel(req, res) {
                     ar.nombre AS area_nombre,
                     ISNULL(ub.nombre, 'General') AS ubicacion_nombre,
                     p.nombre AS puesto_nombre,
+                    ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
                     ISNULL(ad.turno, 'UNICO') AS turno,
                     ISNULL(ad.cantidad_asistentes, 0) AS cantidad_asistentes,
                     ad.observaciones,
@@ -446,37 +515,62 @@ async function exportExcel(req, res) {
 
             let currentRow = 6;
             let total = 0;
+            let totalContratadosExcel = 0;
+            let totalFaltantesExcel = 0;
             resData.recordset.forEach(r => {
+                const contratada = r.cantidad_contratada || 0;
+                const asistentes = r.cantidad_asistentes || 0;
+                const faltantes = contratada > 0 ? Math.max(0, contratada - asistentes) : 0;
+                const cob = contratada > 0 ? `${Math.round((asistentes / contratada) * 100)}%` : (asistentes > 0 ? '100%' : '0%');
+
                 const row = worksheet.getRow(currentRow);
                 row.values = [
                     r.area_nombre,
                     r.ubicacion_nombre,
                     r.puesto_nombre,
+                    contratada,
                     r.turno === 'UNICO' ? 'Turno Único' : (r.turno === 'TURNO_1' ? 'Turno 1' : 'Turno 2'),
-                    r.cantidad_asistentes,
+                    asistentes,
+                    faltantes,
+                    cob,
                     r.observaciones || '',
                     r.registrado_por || '-',
                     r.hora_registro || '-'
                 ];
-                row.getCell(5).alignment = { horizontal: 'center' };
-                total += r.cantidad_asistentes;
+                row.getCell(4).alignment = { horizontal: 'center' };
+                row.getCell(6).alignment = { horizontal: 'center' };
+                row.getCell(7).alignment = { horizontal: 'center' };
+                row.getCell(8).alignment = { horizontal: 'center' };
+                totalContratadosExcel += contratada;
+                total += asistentes;
+                totalFaltantesExcel += faltantes;
                 currentRow++;
             });
 
             // Fila Total
             const totalRow = worksheet.getRow(currentRow);
-            totalRow.getCell(4).value = 'TOTAL GENERAL:';
+            totalRow.getCell(3).value = 'TOTALES GENERALES:';
+            totalRow.getCell(3).font = { bold: true };
+            totalRow.getCell(3).alignment = { horizontal: 'right' };
+            totalRow.getCell(4).value = totalContratadosExcel;
             totalRow.getCell(4).font = { bold: true };
-            totalRow.getCell(4).alignment = { horizontal: 'right' };
-            totalRow.getCell(5).value = total;
-            totalRow.getCell(5).font = { bold: true };
-            totalRow.getCell(5).alignment = { horizontal: 'center' };
+            totalRow.getCell(4).alignment = { horizontal: 'center' };
+            totalRow.getCell(6).value = total;
+            totalRow.getCell(6).font = { bold: true };
+            totalRow.getCell(6).alignment = { horizontal: 'center' };
+            totalRow.getCell(7).value = totalFaltantesExcel;
+            totalRow.getCell(7).font = { bold: true };
+            totalRow.getCell(7).alignment = { horizontal: 'center' };
+            const globalCob = totalContratadosExcel > 0 ? `${Math.round((total / totalContratadosExcel) * 100)}%` : '100%';
+            totalRow.getCell(8).value = globalCob;
+            totalRow.getCell(8).font = { bold: true };
+            totalRow.getCell(8).alignment = { horizontal: 'center' };
 
         } else if (tipo === 'detalle_puesto') {
             worksheet.getCell('A3').value = `Filtro: Acumulado por Puestos | Periodo: ${fechaInicio} al ${fechaFin}`;
             worksheet.getCell('A3').font = { bold: true, size: 10 };
 
-            const headers = ['Área', 'Puesto de Trabajo', 'Días Registrados', 'Total Asistencias', 'Promedio Diario', 'Máximo Diario', 'Mínimo Diario'];
+            const headers = ['Área', 'Puesto de Trabajo', 'Plantilla Contratada', 'Días Registrados', 'Total Asistencias', 'Promedio Diario', '% Cumplimiento', 'Máximo Diario', 'Mínimo Diario'];
             const headerRow = worksheet.getRow(5);
             headerRow.values = headers;
             headerRow.eachCell(cell => {
@@ -490,6 +584,7 @@ async function exportExcel(req, res) {
                 SELECT 
                     ar.nombre AS area_nombre,
                     p.nombre AS puesto_nombre,
+                    ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
                     COUNT(DISTINCT ad.fecha) AS dias_registrados,
                     ISNULL(SUM(ad.cantidad_asistentes), 0) AS total_asistencias,
                     ISNULL(AVG(CAST(ad.cantidad_asistentes AS FLOAT)), 0) AS promedio_diario,
@@ -519,7 +614,7 @@ async function exportExcel(req, res) {
             }
 
             query += `
-                GROUP BY ar.nombre, p.nombre
+                GROUP BY ar.nombre, p.nombre, p.cantidad_contratada
                 ORDER BY total_asistencias DESC, ar.nombre ASC
             `;
 
@@ -527,14 +622,21 @@ async function exportExcel(req, res) {
 
             let currentRow = 6;
             let sumTotal = 0;
+            let sumContratados = 0;
             resData.recordset.forEach(r => {
+                const contratada = r.cantidad_contratada || 0;
+                const prom = Number(r.promedio_diario) || 0;
+                const cob = contratada > 0 ? `${Math.round((prom / contratada) * 100)}%` : '-';
+
                 const row = worksheet.getRow(currentRow);
                 row.values = [
                     r.area_nombre,
                     r.puesto_nombre,
+                    contratada,
                     r.dias_registrados,
                     r.total_asistencias,
-                    Number(r.promedio_diario).toFixed(1),
+                    prom.toFixed(1),
+                    cob,
                     r.max_dia,
                     r.min_dia
                 ];
@@ -543,23 +645,29 @@ async function exportExcel(req, res) {
                 row.getCell(5).alignment = { horizontal: 'center' };
                 row.getCell(6).alignment = { horizontal: 'center' };
                 row.getCell(7).alignment = { horizontal: 'center' };
+                row.getCell(8).alignment = { horizontal: 'center' };
+                row.getCell(9).alignment = { horizontal: 'center' };
+                sumContratados += contratada;
                 sumTotal += r.total_asistencias;
                 currentRow++;
             });
 
             const totalRow = worksheet.getRow(currentRow);
-            totalRow.getCell(3).value = 'TOTAL ASISTENCIAS:';
+            totalRow.getCell(2).value = 'TOTALES:';
+            totalRow.getCell(2).font = { bold: true };
+            totalRow.getCell(2).alignment = { horizontal: 'right' };
+            totalRow.getCell(3).value = sumContratados;
             totalRow.getCell(3).font = { bold: true };
-            totalRow.getCell(3).alignment = { horizontal: 'right' };
-            totalRow.getCell(4).value = sumTotal;
-            totalRow.getCell(4).font = { bold: true };
-            totalRow.getCell(4).alignment = { horizontal: 'center' };
+            totalRow.getCell(3).alignment = { horizontal: 'center' };
+            totalRow.getCell(5).value = sumTotal;
+            totalRow.getCell(5).font = { bold: true };
+            totalRow.getCell(5).alignment = { horizontal: 'center' };
 
         } else {
             worksheet.getCell('A3').value = `Filtro: Resumen por Área | Periodo: ${fechaInicio} al ${fechaFin}`;
             worksheet.getCell('A3').font = { bold: true, size: 10 };
 
-            const headers = ['Código', 'Nombre del Área', 'Total Puestos', 'Días con Registro', 'Total Asistencias', 'Promedio por Puesto'];
+            const headers = ['Código', 'Nombre del Área', 'Total Puestos', 'Plantilla Contratada', 'Días con Registro', 'Total Asistencias', 'Promedio por Puesto', '% Cumplimiento'];
             const headerRow = worksheet.getRow(5);
             headerRow.values = headers;
             headerRow.eachCell(cell => {
@@ -577,47 +685,69 @@ async function exportExcel(req, res) {
                         ar.codigo,
                         ar.nombre AS area_nombre,
                         COUNT(DISTINCT p.id_puesto) AS total_puestos,
+                        ISNULL(plantilla.total_contratados, 0) AS total_contratados,
                         COUNT(DISTINCT ad.fecha) AS dias_con_registro,
                         ISNULL(SUM(ad.cantidad_asistentes), 0) AS total_asistencias,
                         ISNULL(AVG(CAST(ad.cantidad_asistentes AS FLOAT)), 0) AS promedio_por_puesto
                     FROM Areas ar
                     INNER JOIN Puestos p ON ar.id_area = p.id_area AND p.activo = 1
+                    LEFT JOIN (
+                        SELECT id_area, SUM(ISNULL(cantidad_contratada, 0)) AS total_contratados
+                        FROM Puestos
+                        WHERE activo = 1
+                        GROUP BY id_area
+                    ) plantilla ON ar.id_area = plantilla.id_area
                     LEFT JOIN Asistencias_Diarias ad 
                         ON p.id_puesto = ad.id_puesto 
                         AND ad.fecha >= @inicio AND ad.fecha <= @fin
                     WHERE ar.id_area IN (${areaListStr})
-                    GROUP BY ar.codigo, ar.nombre
+                    GROUP BY ar.codigo, ar.nombre, plantilla.total_contratados
                     ORDER BY total_asistencias DESC
                 `);
 
             let currentRow = 6;
             let total = 0;
+            let totalContratadosArea = 0;
             resData.recordset.forEach(r => {
+                const contratada = r.total_contratados || 0;
+                const prom = Number(r.promedio_por_puesto) || 0;
+                const dias = r.dias_con_registro || 1;
+                const promDiarioArea = dias > 0 ? (r.total_asistencias / dias) : 0;
+                const cob = contratada > 0 ? `${Math.round((promDiarioArea / contratada) * 100)}%` : '-';
+
                 const row = worksheet.getRow(currentRow);
                 row.values = [
                     r.codigo,
                     r.area_nombre,
                     r.total_puestos,
+                    contratada,
                     r.dias_con_registro,
                     r.total_asistencias,
-                    Number(r.promedio_por_puesto).toFixed(1)
+                    prom.toFixed(1),
+                    cob
                 ];
                 row.getCell(1).alignment = { horizontal: 'center' };
                 row.getCell(3).alignment = { horizontal: 'center' };
                 row.getCell(4).alignment = { horizontal: 'center' };
                 row.getCell(5).alignment = { horizontal: 'center' };
                 row.getCell(6).alignment = { horizontal: 'center' };
+                row.getCell(7).alignment = { horizontal: 'center' };
+                row.getCell(8).alignment = { horizontal: 'center' };
+                totalContratadosArea += contratada;
                 total += r.total_asistencias;
                 currentRow++;
             });
 
             const totalRow = worksheet.getRow(currentRow);
-            totalRow.getCell(4).value = 'TOTAL ASISTENCIAS:';
+            totalRow.getCell(3).value = 'TOTALES:';
+            totalRow.getCell(3).font = { bold: true };
+            totalRow.getCell(3).alignment = { horizontal: 'right' };
+            totalRow.getCell(4).value = totalContratadosArea;
             totalRow.getCell(4).font = { bold: true };
-            totalRow.getCell(4).alignment = { horizontal: 'right' };
-            totalRow.getCell(5).value = total;
-            totalRow.getCell(5).font = { bold: true };
-            totalRow.getCell(5).alignment = { horizontal: 'center' };
+            totalRow.getCell(4).alignment = { horizontal: 'center' };
+            totalRow.getCell(6).value = total;
+            totalRow.getCell(6).font = { bold: true };
+            totalRow.getCell(6).alignment = { horizontal: 'center' };
         }
 
         worksheet.columns.forEach(col => {

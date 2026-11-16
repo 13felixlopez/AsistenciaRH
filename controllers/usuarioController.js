@@ -443,11 +443,106 @@ async function toggleUserStatus(req, res) {
     }
 }
 
+// Eliminar o desactivar usuario con protección de integridad histórica
+async function deleteUser(req, res) {
+    const { id } = req.params;
+    const currentUserId = req.session.user ? req.session.user.id_usuario : null;
+
+    if (!id) {
+        req.flash('error', 'ID de usuario no proporcionado.');
+        return res.redirect('/usuarios');
+    }
+
+    const targetId = parseInt(id, 10);
+
+    // 1. Prohibir auto-eliminación
+    if (currentUserId && currentUserId === targetId) {
+        req.flash('error', 'Acción denegada: No puedes eliminar tu propia cuenta de usuario.');
+        return res.redirect('/usuarios');
+    }
+
+    try {
+        const pool = await getPool();
+
+        // 2. Obtener datos del usuario
+        const userRes = await pool.request()
+            .input('id', sql.Int, targetId)
+            .query('SELECT u.id_usuario, u.usuario, u.nombre, u.email, r.codigo AS rol_codigo FROM Usuarios u INNER JOIN Roles r ON u.id_rol = r.id_rol WHERE u.id_usuario = @id');
+
+        if (userRes.recordset.length === 0) {
+            req.flash('error', 'El usuario especificado no existe.');
+            return res.redirect('/usuarios');
+        }
+
+        const targetUser = userRes.recordset[0];
+
+        // 3. Prohibir eliminar al superadministrador inicial
+        if (targetUser.usuario === 'admin' || targetUser.email === 'admin@asistencia.com') {
+            req.flash('error', 'Acción denegada: No está permitido eliminar la cuenta principal de administración.');
+            return res.redirect('/usuarios');
+        }
+
+        // 4. Verificar si tiene registros históricos en Asistencias_Diarias
+        const asistenciasCheck = await pool.request()
+            .input('id', sql.Int, targetId)
+            .query('SELECT COUNT(1) AS total FROM Asistencias_Diarias WHERE id_usuario_registro = @id OR id_usuario_modificacion = @id');
+
+        const tieneAsistencias = (asistenciasCheck.recordset[0].total || 0) > 0;
+
+        if (tieneAsistencias) {
+            // Baja lógica: desactivar y revocar permisos para preservar la integridad de auditoría
+            const trx = new sql.Transaction(pool);
+            await trx.begin();
+            try {
+                await new sql.Request(trx)
+                    .input('id', sql.Int, targetId)
+                    .query('UPDATE Usuarios SET activo = 0 WHERE id_usuario = @id');
+
+                await new sql.Request(trx)
+                    .input('id', sql.Int, targetId)
+                    .query('DELETE FROM Usuario_Areas WHERE id_usuario = @id; DELETE FROM Usuario_Ubicaciones WHERE id_usuario = @id;');
+
+                await trx.commit();
+
+                const msg = `El usuario "${targetUser.nombre}" cuenta con asistencias registradas en el historial. Por motivos de auditoría, ha sido desactivado y se han revocado todos sus accesos.`;
+                if (req.xhr || req.headers.accept?.includes('json')) {
+                    return res.json({ success: true, message: msg, softDelete: true });
+                }
+                req.flash('success', msg);
+                return res.redirect('/usuarios');
+            } catch (errTrx) {
+                await trx.rollback();
+                throw errTrx;
+            }
+        } else {
+            // Eliminación física permanente
+            await pool.request()
+                .input('id', sql.Int, targetId)
+                .query('DELETE FROM Usuarios WHERE id_usuario = @id');
+
+            const msg = `Usuario "${targetUser.nombre}" (@${targetUser.usuario}) eliminado permanentemente del sistema.`;
+            if (req.xhr || req.headers.accept?.includes('json')) {
+                return res.json({ success: true, message: msg, softDelete: false });
+            }
+            req.flash('success', msg);
+            return res.redirect('/usuarios');
+        }
+    } catch (err) {
+        console.error('Error al eliminar usuario:', err);
+        if (req.xhr || req.headers.accept?.includes('json')) {
+            return res.status(500).json({ success: false, message: 'Error interno al eliminar usuario: ' + err.message });
+        }
+        req.flash('error', 'Error al procesar eliminación del usuario: ' + err.message);
+        return res.redirect('/usuarios');
+    }
+}
+
 module.exports = {
     listUsuarios,
     showCreateUser,
     createUser,
     showEditUser,
     updateUser,
-    toggleUserStatus
+    toggleUserStatus,
+    deleteUser
 };

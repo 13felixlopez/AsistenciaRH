@@ -11,12 +11,41 @@ const client = createClient({
     authToken
 });
 
+let migrationChecked = false;
+
+/**
+ * Verifica y aplica automáticamente columnas y migraciones pendientes en Turso DB
+ */
+async function verifyAndMigrateTurso() {
+    if (migrationChecked) return;
+    try {
+        const tableCheck = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Puestos'");
+        if (tableCheck.rows && tableCheck.rows.length > 0) {
+            const tableInfo = await client.execute("PRAGMA table_info(Puestos)");
+            if (tableInfo.rows && tableInfo.rows.length > 0) {
+                const hasCol = tableInfo.rows.some(r => r.name === 'cantidad_contratada');
+                if (!hasCol) {
+                    console.log('🔄 Agregando columna cantidad_contratada a Puestos en Turso DB...');
+                    await client.execute("ALTER TABLE Puestos ADD COLUMN cantidad_contratada INTEGER NOT NULL DEFAULT 0");
+                    console.log('✅ Columna cantidad_contratada agregada exitosamente en Turso DB.');
+                }
+                migrationChecked = true;
+            }
+        }
+    } catch (err) {
+        console.warn('Nota migración automática Turso:', err.message);
+    }
+}
+
 /**
  * Adaptador de compatibilidad para ejecutar queries en Turso (SQLite/libSQL)
  * Retorna un objeto con formato { recordset, rowsAffected, lastInsertRowid }
  * compatible con la arquitectura del sistema.
  */
 async function query(sql, args = []) {
+    if (!migrationChecked && !sql.includes('sqlite_master') && !sql.includes('table_info')) {
+        await verifyAndMigrateTurso();
+    }
     const res = await client.execute({ sql, args });
     return {
         recordset: res.rows || [],
@@ -85,5 +114,6 @@ async function initDatabase(force = false) {
 module.exports = {
     client,
     query,
-    initDatabase
+    initDatabase,
+    verifyAndMigrateTurso
 };

@@ -306,10 +306,74 @@ async function toggleUserStatus(req, res) {
     }
 }
 
+// Eliminar usuario con protección de integridad referencial
+async function deleteUser(req, res) {
+    const user = req.user || req.session.user;
+    const { id } = req.params;
+    const userId = parseInt(id, 10);
+
+    if (!userId) {
+        return res.status(400).json({ success: false, message: 'ID de usuario inválido.' });
+    }
+
+    if (user && user.id_usuario === userId) {
+        return res.status(400).json({ success: false, message: 'No puedes eliminar tu propia cuenta de usuario en sesión activa.' });
+    }
+
+    try {
+        const userRes = await query('SELECT id_usuario, usuario, nombre FROM Usuarios WHERE id_usuario = ?', [userId]);
+        if (userRes.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'El usuario no existe.' });
+        }
+        const targetUser = userRes.recordset[0];
+        if (targetUser.usuario === 'admin') {
+            return res.status(403).json({ success: false, message: 'La cuenta maestra de Administrador del sistema no puede ser eliminada.' });
+        }
+
+        // Verificar si tiene asistencias registradas o modificadas
+        const asisRes = await query(`
+            SELECT COUNT(*) AS total
+            FROM Asistencias_Diarias
+            WHERE id_usuario_registro = ? OR id_usuario_modificacion = ?
+        `, [userId, userId]);
+
+        const hasHistory = (asisRes.recordset[0]?.total || 0) > 0;
+
+        if (hasHistory) {
+            // Baja lógica para proteger auditoría
+            await query('UPDATE Usuarios SET activo = 0 WHERE id_usuario = ?', [userId]);
+            await query('DELETE FROM Usuario_Areas WHERE id_usuario = ?', [userId]);
+            await query('DELETE FROM Usuario_Ubicaciones WHERE id_usuario = ?', [userId]);
+
+            return res.json({
+                success: true,
+                message: `El usuario "${targetUser.nombre}" posee asistencias registradas en el histórico. Por integridad de datos fue desactivado y se revocaron sus permisos.`
+            });
+        }
+
+        // Eliminación física definitiva
+        await query('DELETE FROM Usuario_Areas WHERE id_usuario = ?', [userId]);
+        await query('DELETE FROM Usuario_Ubicaciones WHERE id_usuario = ?', [userId]);
+        await query('DELETE FROM Usuarios WHERE id_usuario = ?', [userId]);
+
+        return res.json({
+            success: true,
+            message: `El usuario "${targetUser.nombre}" fue eliminado exitosamente.`
+        });
+    } catch (err) {
+        console.error('Error al eliminar usuario:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al eliminar usuario: ' + err.message
+        });
+    }
+}
+
 module.exports = {
     listUsuarios,
     getUserFormData,
     createUser,
     updateUser,
-    toggleUserStatus
+    toggleUserStatus,
+    deleteUser
 };

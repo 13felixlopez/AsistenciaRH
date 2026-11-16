@@ -34,7 +34,11 @@
                             <h2 class="fw-bold mb-1 text-dark">Puestos de Trabajo</h2>
                             <p class="text-muted mb-0">Gestión de cargos y puestos organizados por cada área operativa.</p>
                         </div>
-                        <div>
+                        <div class="d-flex gap-2">
+                            <a href="/plantilla.html" class="btn btn-outline-primary d-flex align-items-center gap-2">
+                                <i class="bi bi-people-fill"></i>
+                                <span>Plantilla de Personal</span>
+                            </a>
                             <button type="button" class="btn btn-primary d-flex align-items-center gap-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoPuesto">
                                 <i class="bi bi-plus-lg"></i>
                                 <span>Nuevo Puesto</span>
@@ -73,6 +77,7 @@
                                             <th class="ps-4">Área Perteneciente</th>
                                             <th>Nombre del Puesto</th>
                                             <th>Descripción</th>
+                                            <th class="text-center">Plantilla Contratada</th>
                                             <th class="text-center">Estado</th>
                                             <th class="pe-4 text-end">Acciones</th>
                                         </tr>
@@ -121,6 +126,11 @@
                             <label for="nuevo_puesto_descripcion" class="form-label fw-semibold">Descripción o Funciones</label>
                             <textarea class="form-control" id="nuevo_puesto_descripcion" rows="3" placeholder="Detalle de actividades principales..."></textarea>
                         </div>
+                        <div class="mb-3">
+                            <label for="nuevo_cantidad_contratada" class="form-label fw-semibold">Personal Contratado / Autorizado</label>
+                            <input type="number" class="form-control" id="nuevo_cantidad_contratada" value="0" min="0" max="500">
+                            <small class="text-muted d-block">Tope máximo presupuestado para este cargo. Limitará la asistencia diaria.</small>
+                        </div>
                         <div class="form-check form-switch mt-3">
                             <input class="form-check-input" type="checkbox" role="switch" id="nuevo_aplica_turnos">
                             <label class="form-check-label fw-semibold" for="nuevo_aplica_turnos">
@@ -162,6 +172,11 @@
                         <div class="mb-3">
                             <label for="edit_puesto_descripcion" class="form-label fw-semibold">Descripción</label>
                             <textarea class="form-control" id="edit_puesto_descripcion" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit_cantidad_contratada" class="form-label fw-semibold">Personal Contratado / Autorizado</label>
+                            <input type="number" class="form-control" id="edit_cantidad_contratada" value="0" min="0" max="500">
+                            <small class="text-muted d-block">Tope máximo presupuestado para este cargo. Limitará la asistencia diaria.</small>
                         </div>
                         <div class="form-check form-switch mt-3">
                             <input class="form-check-input" type="checkbox" role="switch" id="edit_aplica_turnos">
@@ -280,6 +295,11 @@
                             </td>
                             <td class="text-muted small">${p.puesto_descripcion || 'Sin descripción'}</td>
                             <td class="text-center">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fs-6">
+                                    <i class="bi bi-people me-1"></i>${p.cantidad_contratada || 0}
+                                </span>
+                            </td>
+                            <td class="text-center">
                                 ${p.activo 
                                     ? '<span class="badge bg-success-subtle text-success border border-success-subtle">Activo</span>' 
                                     : '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Inactivo</span>'}
@@ -291,6 +311,7 @@
                                             data-area="${p.id_area}"
                                             data-nombre="${p.puesto_nombre}"
                                             data-descripcion="${p.puesto_descripcion || ''}"
+                                            data-contratada="${p.cantidad_contratada || 0}"
                                             data-turnos="${p.aplica_turnos ? '1' : '0'}"
                                             data-activo="${p.activo ? '1' : '0'}"
                                             title="Editar puesto">
@@ -314,6 +335,7 @@
                             document.getElementById('edit_id_area').value = btn.getAttribute('data-area');
                             document.getElementById('edit_puesto_nombre').value = btn.getAttribute('data-nombre');
                             document.getElementById('edit_puesto_descripcion').value = btn.getAttribute('data-descripcion');
+                            document.getElementById('edit_cantidad_contratada').value = btn.getAttribute('data-contratada') || 0;
                             document.getElementById('edit_aplica_turnos').checked = btn.getAttribute('data-turnos') === '1';
                             document.getElementById('edit_puesto_activo').checked = btn.getAttribute('data-activo') === '1';
                             modalEditarPuesto.show();
@@ -370,10 +392,11 @@
                 const id_area = document.getElementById('nuevo_id_area').value;
                 const nombre = document.getElementById('nuevo_puesto_nombre').value.trim();
                 const descripcion = document.getElementById('nuevo_puesto_descripcion').value.trim();
+                const cantidad_contratada = parseInt(document.getElementById('nuevo_cantidad_contratada').value, 10) || 0;
                 const aplica_turnos = document.getElementById('nuevo_aplica_turnos').checked;
 
                 try {
-                    const res = await api.post('/puestos/crear', { id_area, nombre, descripcion, aplica_turnos });
+                    const res = await api.post('/puestos/crear', { id_area, nombre, descripcion, aplica_turnos, cantidad_contratada });
                     if (res.success) {
                         modalNuevoPuesto.hide();
                         document.getElementById('formNuevoPuesto').reset();
@@ -392,11 +415,12 @@
                 const id_area = document.getElementById('edit_id_area').value;
                 const nombre = document.getElementById('edit_puesto_nombre').value.trim();
                 const descripcion = document.getElementById('edit_puesto_descripcion').value.trim();
+                const cantidad_contratada = parseInt(document.getElementById('edit_cantidad_contratada').value, 10) || 0;
                 const aplica_turnos = document.getElementById('edit_aplica_turnos').checked;
                 const activo = document.getElementById('edit_puesto_activo').checked;
 
                 try {
-                    const res = await api.post('/puestos/editar', { id_puesto, id_area, nombre, descripcion, aplica_turnos, activo });
+                    const res = await api.post('/puestos/editar', { id_puesto, id_area, nombre, descripcion, aplica_turnos, activo, cantidad_contratada });
                     if (res.success) {
                         modalEditarPuesto.hide();
                         showToast('success', res.message);

@@ -408,10 +408,99 @@ async function toggleUserStatus(req, res) {
     }
 }
 
+// Eliminar o desactivar usuario con protección de integridad histórica
+async function deleteUser(req, res) {
+    const { id } = req.params;
+    const currentUser = req.user || (req.session && req.session.user);
+    const currentUserId = currentUser ? currentUser.id_usuario : null;
+
+    if (!id) {
+        return res.status(400).json({ success: false, message: 'ID de usuario no proporcionado.' });
+    }
+
+    const targetId = parseInt(id, 10);
+
+    // 1. Prohibir auto-eliminación
+    if (currentUserId && currentUserId === targetId) {
+        return res.status(400).json({ success: false, message: 'Acción denegada: No puedes eliminar tu propia cuenta de usuario.' });
+    }
+
+    try {
+        const pool = await getPool();
+
+        // 2. Obtener datos del usuario
+        const userRes = await pool.request()
+            .input('id', sql.Int, targetId)
+            .query('SELECT u.id_usuario, u.usuario, u.nombre, u.email, r.codigo AS rol_codigo FROM Usuarios u INNER JOIN Roles r ON u.id_rol = r.id_rol WHERE u.id_usuario = @id');
+
+        if (userRes.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'El usuario especificado no existe.' });
+        }
+
+        const targetUser = userRes.recordset[0];
+
+        // 3. Prohibir eliminar al superadministrador inicial
+        if (targetUser.usuario === 'admin' || targetUser.email === 'admin@asistencia.com') {
+            return res.status(400).json({ success: false, message: 'Acción denegada: No está permitido eliminar la cuenta raíz de Administración.' });
+        }
+
+        // 4. Verificar si tiene registros históricos en Asistencias_Diarias
+        const asistenciasCheck = await pool.request()
+            .input('id', sql.Int, targetId)
+            .query('SELECT COUNT(1) AS total FROM Asistencias_Diarias WHERE id_usuario_registro = @id OR id_usuario_modificacion = @id');
+
+        const tieneAsistencias = (asistenciasCheck.recordset[0].total || 0) > 0;
+
+        if (tieneAsistencias) {
+            // Baja lógica: desactivar y revocar permisos para preservar la integridad de los reportes
+            const trx = new sql.Transaction(pool);
+            await trx.begin();
+            try {
+                await new sql.Request(trx)
+                    .input('id', sql.Int, targetId)
+                    .query('UPDATE Usuarios SET activo = 0 WHERE id_usuario = @id');
+
+                await new sql.Request(trx)
+                    .input('id', sql.Int, targetId)
+                    .query('DELETE FROM Usuario_Areas WHERE id_usuario = @id; DELETE FROM Usuario_Ubicaciones WHERE id_usuario = @id;');
+
+                await trx.commit();
+
+                return res.json({
+                    success: true,
+                    softDelete: true,
+                    message: `El usuario "${targetUser.nombre}" cuenta con asistencias registradas en el historial. Por motivos de auditoría, ha sido desactivado y se han revocado todos sus accesos.`
+                });
+            } catch (errTrx) {
+                await trx.rollback();
+                throw errTrx;
+            }
+        } else {
+            // Eliminación física permanente
+            await pool.request()
+                .input('id', sql.Int, targetId)
+                .query('DELETE FROM Usuarios WHERE id_usuario = @id');
+
+            return res.json({
+                success: true,
+                softDelete: false,
+                message: `Usuario "${targetUser.nombre}" (@${targetUser.usuario}) eliminado permanentemente del sistema.`
+            });
+        }
+    } catch (err) {
+        console.error('Error al eliminar usuario:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error interno al eliminar usuario: ' + err.message
+        });
+    }
+}
+
 module.exports = {
     listUsuarios,
     getUserFormData,
     createUser,
     updateUser,
-    toggleUserStatus
+    toggleUserStatus,
+    deleteUser
 };

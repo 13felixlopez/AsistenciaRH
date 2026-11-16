@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS Puestos (
     descripcion TEXT,
     activo INTEGER NOT NULL DEFAULT 1,
     aplica_turnos INTEGER NOT NULL DEFAULT 0,
+    cantidad_contratada INTEGER NOT NULL DEFAULT 0,
     fecha_creacion TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (id_area) REFERENCES Areas(id_area) ON DELETE CASCADE
 );

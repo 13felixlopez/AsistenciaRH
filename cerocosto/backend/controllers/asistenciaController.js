@@ -17,15 +17,15 @@ async function showRegistroForm(req, res) {
     let selectedUbicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
     const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
 
-    // Restricción: Solo se puede capturar la asistencia del día actual
-    if (req.query.fecha && req.query.fecha !== hoyStr) {
+    // Restricción: Supervisores solo capturan el día actual, Administradores pueden gestionar cualquier fecha
+    if (req.query.fecha && req.query.fecha !== hoyStr && !isAdmin) {
         return res.status(400).json({
             success: false,
-            message: `El registro de asistencia está habilitado exclusivamente para el día actual (${hoyStr}). Para consultar fechas pasadas, dirígete al Historial o Reportes.`
+            message: `El registro de asistencia para supervisores está habilitado exclusivamente para el día actual (${hoyStr}). Para consultar fechas pasadas, dirígete al Historial o Reportes.`
         });
     }
 
-    const selectedDate = hoyStr;
+    const selectedDate = (req.query.fecha && isAdmin) ? req.query.fecha : hoyStr;
 
     try {
         // Chequeo en segundo plano para autocompletar con 0 días anteriores pendientes
@@ -85,7 +85,8 @@ async function showRegistroForm(req, res) {
                         p.id_puesto, 
                         p.nombre AS puesto_nombre, 
                         p.descripcion AS puesto_descripcion,
-                        COALESCE(p.aplica_turnos, 0) AS aplica_turnos
+                        COALESCE(p.aplica_turnos, 0) AS aplica_turnos,
+                        COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada
                     FROM Puestos p
                     WHERE p.id_area = ? AND p.activo = 1
                     ORDER BY p.nombre ASC
@@ -145,6 +146,7 @@ async function showRegistroForm(req, res) {
                             puesto_nombre: p.puesto_nombre,
                             puesto_descripcion: p.puesto_descripcion,
                             aplica_turnos: p.aplica_turnos,
+                            cantidad_contratada: p.cantidad_contratada || 0,
                             turno: t.turno,
                             turno_label: t.label,
                             turno_badge: t.badgeClass,
@@ -209,10 +211,10 @@ async function saveAsistencias(req, res) {
     const areaIdNum = parseInt(id_area, 10);
     const ubicacionIdNum = id_ubicacion ? parseInt(id_ubicacion, 10) : null;
 
-    if (fecha !== hoyStr) {
+    if (fecha !== hoyStr && !isAdmin) {
         return res.status(400).json({
             success: false,
-            message: `Acción rechazada: Solo está permitido registrar asistencias para el día de hoy (${hoyStr}).`
+            message: `Acción rechazada: Los supervisores solo pueden registrar asistencias para el día de hoy (${hoyStr}). Los administradores pueden gestionar fechas anteriores.`
         });
     }
 
@@ -233,6 +235,14 @@ async function saveAsistencias(req, res) {
             return res.status(400).json({ success: false, message: 'No se recibieron datos de puestos para guardar.' });
         }
 
+        // Obtener dotación contratada de los puestos del área para validar topes
+        const puestosInfoRes = await query(
+            'SELECT id_puesto, nombre, COALESCE(cantidad_contratada, 0) AS cantidad_contratada FROM Puestos WHERE id_area = ?',
+            [areaIdNum]
+        );
+        const mapaContratados = new Map();
+        puestosInfoRes.recordset.forEach(p => mapaContratados.set(p.id_puesto, p));
+
         let guardados = 0;
         let actualizados = 0;
         let ignoradosPorSupervisor = 0;
@@ -248,6 +258,15 @@ async function saveAsistencias(req, res) {
 
             const cantidadVal = parseInt(valStr, 10);
             if (isNaN(cantidadVal) || cantidadVal < 0) continue;
+
+            // Validación estricta contra la plantilla contratada
+            const infoPuesto = mapaContratados.get(puestoId);
+            if (infoPuesto && infoPuesto.cantidad_contratada > 0 && cantidadVal > infoPuesto.cantidad_contratada) {
+                return res.status(400).json({
+                    success: false,
+                    message: `La cantidad de asistentes (${cantidadVal}) excede la plantilla contratada (${infoPuesto.cantidad_contratada}) autorizada para el puesto "${infoPuesto.nombre}".`
+                });
+            }
 
             const observacionesVal = item.observaciones ? item.observaciones.trim() : null;
 
@@ -277,9 +296,10 @@ async function saveAsistencias(req, res) {
                     UPDATE Asistencias_Diarias
                     SET cantidad_asistentes = ?,
                         observaciones = ?,
+                        id_usuario_modificacion = ?,
                         fecha_modificacion = datetime('now', 'localtime')
                     WHERE id_asistencia = ?
-                `, [cantidadVal, observacionesVal, idAsistenciaExistente]);
+                `, [cantidadVal, observacionesVal, user.id_usuario, idAsistenciaExistente]);
                 actualizados++;
             } else {
                 // Nuevo registro
@@ -362,6 +382,7 @@ async function listHistorial(req, res) {
                     p.id_puesto,
                     p.nombre AS puesto_nombre,
                     COALESCE(p.aplica_turnos, 0) AS aplica_turnos,
+                    COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada,
                     a.id_area,
                     a.nombre AS area_nombre,
                     a.codigo AS area_codigo,
@@ -412,8 +433,71 @@ async function listHistorial(req, res) {
     }
 }
 
+// Corregir asistencia individual (Exclusivo para ADMIN)
+async function corregirAsistencia(req, res) {
+    const user = req.user || req.session.user;
+    const { id_asistencia, cantidad_asistentes, observaciones } = req.body;
+
+    if (!id_asistencia || cantidad_asistentes === undefined || cantidad_asistentes === null || cantidad_asistentes === '') {
+        return res.status(400).json({
+            success: false,
+            message: 'Datos incompletos para corregir la asistencia.'
+        });
+    }
+
+    const nuevaCantidad = parseInt(cantidad_asistentes, 10);
+    if (isNaN(nuevaCantidad) || nuevaCantidad < 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'La cantidad de asistentes debe ser un número entero mayor o igual a 0.'
+        });
+    }
+
+    try {
+        const asisRes = await query(`
+            SELECT ad.id_asistencia, ad.id_puesto, p.nombre AS puesto_nombre, COALESCE(p.cantidad_contratada, 0) AS cantidad_contratada
+            FROM Asistencias_Diarias ad
+            INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
+            WHERE ad.id_asistencia = ?
+        `, [id_asistencia]);
+
+        if (asisRes.recordset.length === 0) {
+            return res.status(404).json({ success: false, message: 'Registro de asistencia no encontrado.' });
+        }
+
+        const registro = asisRes.recordset[0];
+        if (registro.cantidad_contratada > 0 && nuevaCantidad > registro.cantidad_contratada) {
+            return res.status(400).json({
+                success: false,
+                message: `La cantidad corregida (${nuevaCantidad}) supera la plantilla contratada (${registro.cantidad_contratada}) autorizada para "${registro.puesto_nombre}".`
+            });
+        }
+
+        await query(`
+            UPDATE Asistencias_Diarias
+            SET cantidad_asistentes = ?,
+                observaciones = ?,
+                id_usuario_modificacion = ?,
+                fecha_modificacion = datetime('now', 'localtime')
+            WHERE id_asistencia = ?
+        `, [nuevaCantidad, observaciones ? observaciones.trim() : null, user.id_usuario, id_asistencia]);
+
+        return res.json({
+            success: true,
+            message: 'Asistencia corregida exitosamente.'
+        });
+    } catch (err) {
+        console.error('Error al corregir asistencia:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al corregir asistencia: ' + err.message
+        });
+    }
+}
+
 module.exports = {
     showRegistroForm,
     saveAsistencias,
-    listHistorial
+    listHistorial,
+    corregirAsistencia
 };

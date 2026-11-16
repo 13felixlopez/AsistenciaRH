@@ -1,0 +1,188 @@
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+    <div>
+        <h2 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+            <i class="bi bi-people-fill text-primary"></i>
+            <span>Plantilla de Personal Contratado</span>
+        </h2>
+        <p class="text-muted mb-0">Define la cantidad autorizada de personal por cargo. Este número evitará sobrepasar el límite al capturar asistencia y asegurará reportes con métricas reales sin inventar cifras.</p>
+    </div>
+</div>
+
+<%- include('../partials/alerts') %>
+
+<!-- Selector de Área -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-3">
+        <form action="/puestos/plantilla" method="GET" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <label for="selectArea" class="col-form-label fw-semibold text-secondary">
+                    <i class="bi bi-diagram-3-fill text-primary me-1"></i> Seleccionar Área:
+                </label>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4">
+                <select name="areaId" id="selectArea" class="form-select" onchange="this.form.submit()">
+                    <% if (areas && areas.length > 0) { %>
+                        <% areas.forEach(function(a) { %>
+                            <option value="<%= a.id_area %>" <%= selectedAreaId === a.id_area ? 'selected' : '' %>>
+                                <%= a.nombre %> (<%= a.codigo %>)
+                            </option>
+                        <% }); %>
+                    <% } else { %>
+                        <option value="">-- No tienes áreas asignadas --</option>
+                    <% } %>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<% if (areaSeleccionada) { %>
+    <form action="/puestos/plantilla/guardar" method="POST" id="formPlantilla">
+        <input type="hidden" name="id_area" value="<%= areaSeleccionada.id_area %>">
+
+        <div class="card shadow-sm border-0 mb-5">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+                        <i class="bi bi-building text-primary"></i>
+                        <span><%= areaSeleccionada.nombre %></span>
+                        <span class="badge bg-light text-muted border small"><%= areaSeleccionada.codigo %></span>
+                    </h5>
+                    <small class="text-muted"><%= puestos.length %> cargos o puestos en esta área</small>
+                </div>
+                <div class="bg-primary-subtle border border-primary-subtle rounded-3 px-3 py-2 text-center shadow-sm">
+                    <small class="text-primary fw-semibold d-block" style="font-size: 0.72rem;">TOTAL PERSONAL CONTRATADO</small>
+                    <span class="fs-4 fw-bold text-primary" id="displayTotalPlantilla"><%= totalContratados %></span>
+                    <small class="text-muted d-block" style="font-size: 0.7rem;">personas autorizadas</small>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                <% if (puestos && puestos.length > 0) { %>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4" style="width: 45%;">Puesto / Cargo</th>
+                                    <th style="width: 25%;">Modalidad de Turnos</th>
+                                    <th class="pe-4 text-center" style="width: 30%;">Personal Contratado / Autorizado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% puestos.forEach(function(p, idx) { %>
+                                    <tr>
+                                        <td class="ps-4">
+                                            <div class="fw-bold text-dark fs-6"><%= p.nombre %></div>
+                                            <% if (p.descripcion) { %>
+                                                <small class="text-muted d-block" style="font-size: 0.75rem;"><%= p.descripcion %></small>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (p.aplica_turnos) { %>
+                                                <span class="badge bg-warning-subtle text-dark border border-warning-subtle">
+                                                    <i class="bi bi-clock-history me-1 text-warning"></i> 2 Turnos (Día / Noche)
+                                                </span>
+                                            <% } else { %>
+                                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                    Turno Único
+                                                </span>
+                                            <% } %>
+                                        </td>
+                                        <td class="pe-4 text-center">
+                                            <div class="input-group input-group-sm mx-auto" style="max-width: 170px;">
+                                                <button type="button" class="btn btn-outline-secondary btn-step-down" data-target="puesto_cant_<%= p.id_puesto %>">
+                                                    <i class="bi bi-dash"></i>
+                                                </button>
+                                                <input type="number" 
+                                                       class="form-control text-center fw-bold fs-6 input-plantilla" 
+                                                       id="puesto_cant_<%= p.id_puesto %>"
+                                                       name="puestos[<%= p.id_puesto %>]" 
+                                                       value="<%= p.cantidad_contratada %>" 
+                                                       min="0" 
+                                                       max="500" 
+                                                       step="1"
+                                                       required>
+                                                <button type="button" class="btn btn-outline-secondary btn-step-up" data-target="puesto_cant_<%= p.id_puesto %>">
+                                                    <i class="bi bi-plus"></i>
+                                                </button>
+                                            </div>
+                                            <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">tope máximo en asistencia</small>
+                                        </td>
+                                    </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="card-footer bg-white p-3 p-md-4 border-top d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3">
+                        <div class="text-muted small">
+                            <i class="bi bi-shield-check text-success me-1"></i>
+                            Al guardar, el sistema no permitirá registrar una asistencia mayor a la cantidad contratada especificada para cada cargo.
+                        </div>
+                        <button type="submit" class="btn btn-primary px-4 py-2 fw-bold shadow-sm d-flex align-items-center gap-2">
+                            <i class="bi bi-save-fill"></i>
+                            <span>Guardar Plantilla de <%= areaSeleccionada.nombre %></span>
+                        </button>
+                    </div>
+                <% } else { %>
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                        No hay puestos activos en esta área para configurar plantilla.
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </form>
+<% } else { %>
+    <div class="card shadow-sm border-0 py-5 text-center text-muted">
+        <i class="bi bi-diagram-3 fs-1 text-secondary mb-2"></i>
+        <h5 class="fw-bold text-dark">Selecciona un Área</h5>
+        <p class="small text-muted mb-0">Elige un área de la lista superior para ver y configurar su personal contratado.</p>
+    </div>
+<% } %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const inputsPlantilla = document.querySelectorAll('.input-plantilla');
+    const displayTotal = document.getElementById('displayTotalPlantilla');
+
+    function recalcularTotal() {
+        let sum = 0;
+        inputsPlantilla.forEach(inp => {
+            const val = parseInt(inp.value, 10);
+            if (!isNaN(val) && val > 0) sum += val;
+        });
+        if (displayTotal) displayTotal.textContent = sum;
+    }
+
+    inputsPlantilla.forEach(inp => {
+        inp.addEventListener('input', recalcularTotal);
+    });
+
+    document.querySelectorAll('.btn-step-up').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const inp = document.getElementById(targetId);
+            if (inp) {
+                const current = parseInt(inp.value, 10) || 0;
+                inp.value = current + 1;
+                recalcularTotal();
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-step-down').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            const inp = document.getElementById(targetId);
+            if (inp) {
+                const current = parseInt(inp.value, 10) || 0;
+                if (current > 0) {
+                    inp.value = current - 1;
+                    recalcularTotal();
+                }
+            }
+        });
+    });
+});
+</script>
