@@ -90,22 +90,10 @@ function isNotSoloVista(req, res, next) {
 
 // Obtener las áreas permitidas para el usuario actual
 async function getUserAllowedAreas(userId, userRole) {
-    // 1. Si el usuario tiene áreas explícitamente asignadas en Usuario_Areas
-    const assignedAreas = await query(`
-        SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
-               ua.permite_registro, ua.permite_reportes
-        FROM Areas a
-        INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
-        WHERE ua.id_usuario = ? AND a.activa = 1
-        ORDER BY a.nombre ASC
-    `, [userId]);
+    const roleUpper = String(userRole || '').toUpperCase();
 
-    if (assignedAreas.recordset.length > 0) {
-        return assignedAreas.recordset;
-    }
-
-    // 2. Si es ADMIN sin restricción individual, ve todas las áreas activas
-    if (userRole === 'ADMIN') {
+    // 1. Si es Administrador, tiene acceso automático a TODAS las áreas activas
+    if (roleUpper === 'ADMIN') {
         const result = await query(`
             SELECT id_area, codigo, nombre, descripcion, activa,
                    1 AS permite_registro, 1 AS permite_reportes
@@ -116,24 +104,27 @@ async function getUserAllowedAreas(userId, userRole) {
         return result.recordset;
     }
 
-    return [];
+    // 2. Si no es Admin, áreas explícitamente asignadas en Usuario_Areas
+    const assignedAreas = await query(`
+        SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
+               ua.permite_registro, ua.permite_reportes
+        FROM Areas a
+        INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
+        WHERE ua.id_usuario = ? AND a.activa = 1
+        ORDER BY a.nombre ASC
+    `, [userId]);
+
+    return assignedAreas.recordset;
 }
 
 // Verificar si un usuario tiene acceso a un área específica
 async function hasAreaAccess(userId, userRole, areaId, type = 'any') {
-    const aId = parseInt(areaId, 10);
-
-    const countRes = await query(
-        'SELECT COUNT(*) AS total FROM Usuario_Areas WHERE id_usuario = ?',
-        [userId]
-    );
-
-    const hasSpecificAssignments = (countRes.recordset[0]?.total || 0) > 0;
-
-    if (userRole === 'ADMIN' && !hasSpecificAssignments) {
+    const roleUpper = String(userRole || '').toUpperCase();
+    if (roleUpper === 'ADMIN') {
         return true;
     }
 
+    const aId = parseInt(areaId, 10);
     let sql = `
         SELECT 1 
         FROM Usuario_Areas ua

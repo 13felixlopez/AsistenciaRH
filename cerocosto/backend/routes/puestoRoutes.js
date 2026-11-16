@@ -6,7 +6,7 @@ const { isAuthenticated, isAdmin } = require('../middlewares/auth');
 router.use(isAuthenticated);
 
 router.get('/', puestoController.listPuestos);
-router.get('/plantilla', puestoController.showPlantilla);
+router.get('/plantilla', puestoController.getPlantillaData);
 router.get('/plantilla/data', puestoController.getPlantillaData);
 router.get('/plantilla/data/:areaId', puestoController.getPlantillaData);
 router.post('/plantilla/guardar', puestoController.savePlantilla);
