@@ -166,7 +166,7 @@ async function showRegistroForm(req, res) {
                 // 3. Estructurar cada slot por puesto y turno
                 for (const p of puestosRes.recordset) {
                     const cantContratada = parseInt(p.cantidad_contratada, 10) || 0;
-                    const requierePlantilla = cantContratada <= 0; // Puesto activo sin dotación contratada registrada
+                    const sinDotacion = cantContratada <= 0;
 
                     const turnosConfig = (p.aplica_turnos === 1 || p.aplica_turnos === true || p.aplica_turnos === '1')
                         ? [
@@ -181,8 +181,9 @@ async function showRegistroForm(req, res) {
                         const key = `${p.id_puesto}_${t.turno}`;
                         const asis = asistsMap[key] || null;
                         const guardado = !!asis;
-                        // Solo el admin puede editar registros ya guardados. Si está pendiente, cualquiera con permiso puede registrar.
-                        const editable = isAdmin || !guardado;
+                        // Si la plantilla es 0, no requiere captura manual de personal (asistencia 0).
+                        // Si tiene plantilla > 0: editable si es admin o si aún no está guardado.
+                        const editable = sinDotacion ? false : (isAdmin || !guardado);
 
                         slotsConAsistencia.push({
                             key,
@@ -191,15 +192,16 @@ async function showRegistroForm(req, res) {
                             puesto_descripcion: p.puesto_descripcion,
                             aplica_turnos: p.aplica_turnos,
                             cantidad_contratada: cantContratada,
-                            requiere_plantilla: requierePlantilla,
+                            sin_dotacion: sinDotacion,
+                            requiere_plantilla: false,
                             turno: t.turno,
                             turno_label: t.label,
                             turno_badge: t.badgeClass,
                             turno_icon: t.icon,
                             id_asistencia: asis ? asis.id_asistencia : null,
-                            cantidad_asistentes: asis ? asis.cantidad_asistentes : '',
+                            cantidad_asistentes: asis ? asis.cantidad_asistentes : (sinDotacion ? 0 : ''),
                             observaciones: asis ? (asis.observaciones || '') : '',
-                            guardado,
+                            guardado: guardado || sinDotacion,
                             editable,
                             registrado_por: asis ? asis.registrado_por : null,
                             fecha_registro: asis ? asis.fecha_registro : null,

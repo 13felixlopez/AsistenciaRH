@@ -265,7 +265,7 @@
                     return;
                 }
 
-                const haySinPlantilla = puestos.some(p => (parseInt(p.cantidad_contratada, 10) || 0) <= 0);
+                const totalContratadosArea = puestos.reduce((sum, p) => sum + (parseInt(p.cantidad_contratada, 10) || 0), 0);
 
                 captureContainer.innerHTML = `
                     <div class="card shadow-sm border-0 mb-5">
@@ -289,18 +289,18 @@
                             </div>
                         </div>
 
-                        ${haySinPlantilla ? `
-                            <div class="alert alert-warning border-warning d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 m-3 mb-0 shadow-sm">
+                        ${(totalContratadosArea === 0 && puestos.length > 0) ? `
+                            <div class="alert alert-info border-info d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 m-3 mb-0 shadow-sm">
                                 <div class="d-flex align-items-center gap-2">
-                                    <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+                                    <i class="bi bi-info-circle-fill fs-4 text-info"></i>
                                     <div>
-                                        <strong class="d-block text-dark">Puestos con Plantilla en 0</strong>
-                                        <small class="text-muted">Los puestos activos deben tener registrada su dotación de personal contratado antes de poder capturar su asistencia.</small>
+                                        <strong class="d-block text-dark">Área sin Plantilla Contratada</strong>
+                                        <small class="text-muted">Todos los cargos de esta área tienen plantilla en 0. Puedes asignar el personal contratado desde el módulo de Plantilla.</small>
                                     </div>
                                 </div>
-                                <a href="/plantilla.html?areaId=${data.selectedAreaId}" class="btn btn-warning text-dark fw-bold btn-sm text-nowrap d-flex align-items-center gap-1 shadow-sm">
+                                <a href="/plantilla.html?areaId=${data.selectedAreaId}" class="btn btn-outline-primary btn-sm text-nowrap d-flex align-items-center gap-1 shadow-sm">
                                     <i class="bi bi-people-fill"></i>
-                                    <span>Registrar Plantilla Contratada</span>
+                                    <span>Configurar Plantilla</span>
                                 </a>
                             </div>
                         ` : ''}
@@ -310,9 +310,9 @@
                                 <div class="puestos-container">
                                     ${puestos.map((p, idx) => {
                                         const contratados = parseInt(p.cantidad_contratada, 10) || 0;
-                                        const requierePlantilla = contratados <= 0;
+                                        const esCeroContratados = contratados <= 0;
                                         return `
-                                        <div class="puesto-row p-3 border-bottom ${!p.editable ? 'bg-light-subtle opacity-75' : (idx % 2 === 0 ? 'bg-white' : 'bg-light-subtle')}">
+                                        <div class="puesto-row p-3 border-bottom ${(!p.editable || esCeroContratados) ? 'bg-light-subtle opacity-75' : (idx % 2 === 0 ? 'bg-white' : 'bg-light-subtle')}">
                                             <div class="row g-2 align-items-center">
                                                 <div class="col-12 col-md-5">
                                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
@@ -323,8 +323,8 @@
                                                                     <i class="bi bi-people me-1"></i>Contratados: ${contratados}
                                                                 </span>
                                                             ` : `
-                                                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" style="font-size: 0.72rem;" title="Plantilla en 0">
-                                                                    <i class="bi bi-people me-1"></i>Contratados: 0
+                                                                <span class="badge bg-light text-muted border" style="font-size: 0.72rem;" title="Puesto con plantilla en 0">
+                                                                    <i class="bi bi-people me-1"></i>Plantilla: 0
                                                                 </span>
                                                             `}
                                                             ${p.aplica_turnos ? `
@@ -335,7 +335,11 @@
                                                             ` : ''}
                                                         </div>
                                                         <span class="badge-status-puesto">
-                                                            ${p.guardado ? `
+                                                            ${esCeroContratados ? `
+                                                                <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.72rem;">
+                                                                    <i class="bi bi-dash-circle me-1"></i> Sin personal (0)
+                                                                </span>
+                                                            ` : p.guardado ? `
                                                                 <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.72rem;">
                                                                     <i class="bi bi-check-circle-fill me-1"></i> Registrado (${p.cantidad_asistentes})
                                                                 </span>
@@ -362,18 +366,18 @@
                                                             <i class="bi bi-people"></i>
                                                         </span>
                                                         <input type="number" 
-                                                               class="form-control input-cantidad fw-bold text-center fs-5 ${!p.editable ? 'bg-light text-muted' : ''}" 
+                                                               class="form-control input-cantidad fw-bold text-center fs-5 ${(!p.editable || esCeroContratados) ? 'bg-light text-muted' : ''}" 
                                                                data-puesto-id="${p.id_puesto}"
                                                                data-nombre="${p.puesto_nombre}"
                                                                data-max="${contratados}"
-                                                               data-requiere-plantilla="${requierePlantilla ? 'true' : 'false'}"
+                                                               data-requiere-plantilla="${esCeroContratados ? 'true' : 'false'}"
                                                                data-turno="${p.turno}"
-                                                               value="${(p.cantidad_asistentes !== '' && p.cantidad_asistentes !== null && p.cantidad_asistentes !== undefined) ? p.cantidad_asistentes : ''}" 
+                                                               value="${esCeroContratados ? 0 : ((p.cantidad_asistentes !== '' && p.cantidad_asistentes !== null && p.cantidad_asistentes !== undefined) ? p.cantidad_asistentes : '')}" 
                                                                min="0" 
                                                                max="${contratados}" 
                                                                step="1" 
                                                                placeholder=""
-                                                               ${!p.editable ? 'readonly' : ''}>
+                                                               ${(!p.editable || esCeroContratados) ? 'readonly' : ''}>
                                                     </div>
                                                     ${contratados > 0 ? `
                                                         <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
@@ -381,7 +385,7 @@
                                                         </small>
                                                     ` : `
                                                         <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
-                                                            Plantilla: <strong>0 personas</strong>
+                                                            Plantilla en <strong>0</strong> (No requiere captura)
                                                         </small>
                                                     `}
                                                 </div>
@@ -390,13 +394,13 @@
                                                 <div class="col-6 col-md-4">
                                                     <label class="form-label text-muted small d-md-none mb-1">Notas / Observaciones:</label>
                                                     <input type="text" 
-                                                           class="form-control form-control-sm text-secondary input-observaciones ${!p.editable ? 'bg-light' : ''}" 
+                                                           class="form-control form-control-sm text-secondary input-observaciones ${(!p.editable || esCeroContratados) ? 'bg-light' : ''}" 
                                                            data-puesto-id="${p.id_puesto}"
                                                            data-turno="${p.turno}"
                                                            value="${p.observaciones || ''}" 
                                                            placeholder="Observación opcional..." 
                                                            maxlength="500"
-                                                           ${!p.editable ? 'readonly' : ''}>
+                                                           ${(!p.editable || esCeroContratados) ? 'readonly' : ''}>
                                                 </div>
                                             </div>
                                         </div>
@@ -447,28 +451,38 @@
                     btnGuardar.disabled = true;
                     btnGuardarText.textContent = 'Guardando...';
 
-                    let errorPlantilla = null;
                     let errorExceso = null;
+                    let puestosConIngreso = 0;
                     const items = [];
+
                     inputsCantidad.forEach(inp => {
+                        const idPuesto = parseInt(inp.getAttribute('data-puesto-id'), 10);
+                        const turno = inp.getAttribute('data-turno');
+                        const maxVal = parseInt(inp.getAttribute('data-max'), 10) || 0;
+                        const nombre = inp.getAttribute('data-nombre') || 'un puesto';
+                        const esCeroPlantilla = inp.getAttribute('data-requiere-plantilla') === 'true';
+
+                        // Los puestos con plantilla en 0 se registran con 0 asistentes
+                        if (esCeroPlantilla) {
+                            items.push({
+                                id_puesto: idPuesto,
+                                turno: turno,
+                                cantidad: 0,
+                                observaciones: ''
+                            });
+                            return;
+                        }
+
                         // Si el usuario no es admin y el puesto ya está registrado/bloqueado, omitir
                         if (inp.readOnly && !data.isAdmin) return;
 
-                        const idPuesto = parseInt(inp.getAttribute('data-puesto-id'), 10);
-                        const turno = inp.getAttribute('data-turno');
                         const rawVal = inp.value.trim();
                         if (rawVal !== '') {
+                            puestosConIngreso++;
                             const cantVal = parseInt(rawVal, 10);
-                            const maxVal = parseInt(inp.getAttribute('data-max'), 10) || 0;
-                            const nombre = inp.getAttribute('data-nombre') || 'un puesto';
-                            const requierePlantilla = inp.getAttribute('data-requiere-plantilla') === 'true';
 
                             if (cantVal > maxVal && !errorExceso) {
-                                if (maxVal === 0) {
-                                    errorExceso = `El puesto "${nombre}" tiene una plantilla autorizada de 0 personas. Para registrar ${cantVal} asistentes, debe configurar primero el personal contratado en la sección de Plantilla.`;
-                                } else {
-                                    errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${maxVal} personas. La cantidad ingresada (${cantVal}) sobrepasa dicho límite.`;
-                                }
+                                errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${maxVal} personas. La cantidad ingresada (${cantVal}) sobrepasa dicho límite.`;
                             }
 
                             const obsInp = captureContainer.querySelector(`.input-observaciones[data-puesto-id="${idPuesto}"][data-turno="${turno}"]`);
@@ -493,10 +507,11 @@
                         return;
                     }
 
-                    if (items.length === 0) {
+                    const hayPuestosConPlantilla = Array.from(inputsCantidad).some(inp => (parseInt(inp.getAttribute('data-max'), 10) || 0) > 0);
+                    if (hayPuestosConPlantilla && puestosConIngreso === 0) {
                         Swal.fire({
-                            title: 'Sin datos',
-                            text: 'No has ingresado cantidad de asistentes para ningún puesto.',
+                            title: 'Sin datos a guardar',
+                            text: 'Ingresa la cantidad de asistentes en al menos un puesto disponible para registrar la jornada.',
                             icon: 'info'
                         });
                         btnGuardar.disabled = false;

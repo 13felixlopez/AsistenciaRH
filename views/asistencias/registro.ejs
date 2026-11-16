@@ -139,19 +139,19 @@
                             <input type="hidden" name="id_ubicacion" value="<%= selectedUbicacionId %>">
                         <% } %>
 
-                        <% const haySinPlantilla = puestos.some(p => p.cantidad_contratada <= 0); %>
-                        <% if (haySinPlantilla) { %>
-                            <div class="alert alert-warning border-warning d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 m-3 mb-0 shadow-sm">
+                        <% const totalContratadosArea = puestos.reduce((sum, p) => sum + (p.cantidad_contratada || 0), 0); %>
+                        <% if (totalContratadosArea === 0 && puestos.length > 0) { %>
+                            <div class="alert alert-info border-info d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 m-3 mb-0 shadow-sm">
                                 <div class="d-flex align-items-center gap-2">
-                                    <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+                                    <i class="bi bi-info-circle-fill fs-4 text-info"></i>
                                     <div>
-                                        <strong class="d-block text-dark">Puestos con Plantilla en 0</strong>
-                                        <small class="text-muted">Los puestos activos deben tener registrada su dotación de personal contratado antes de poder capturar su asistencia.</small>
+                                        <strong class="d-block text-dark">Área sin Plantilla Contratada</strong>
+                                        <small class="text-muted">Todos los cargos de esta área tienen plantilla en 0. Puedes asignar el personal contratado desde el catálogo de Plantilla.</small>
                                     </div>
                                 </div>
-                                <a href="/puestos/plantilla?areaId=<%= selectedAreaId %>" class="btn btn-warning text-dark fw-bold btn-sm text-nowrap d-flex align-items-center gap-1 shadow-sm">
+                                <a href="/puestos/plantilla?areaId=<%= selectedAreaId %>" class="btn btn-outline-primary btn-sm text-nowrap d-flex align-items-center gap-1 shadow-sm">
                                     <i class="bi bi-people-fill"></i>
-                                    <span>Registrar Plantilla Contratada</span>
+                                    <span>Configurar Plantilla</span>
                                 </a>
                             </div>
                         <% } %>
@@ -171,12 +171,9 @@
                                                             <i class="bi bi-people me-1"></i>Contratados: <%= p.cantidad_contratada %>
                                                         </span>
                                                     <% } else { %>
-                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.72rem;" title="Plantilla en 0: Obligatorio registrar personal contratado">
-                                                            <i class="bi bi-exclamation-triangle-fill me-1"></i>Requiere Plantilla (0 contratados)
+                                                        <span class="badge bg-light text-muted border" style="font-size: 0.72rem;" title="Puesto con plantilla en 0">
+                                                            <i class="bi bi-people me-1"></i>Plantilla: 0
                                                         </span>
-                                                        <a href="/puestos/plantilla?areaId=<%= selectedAreaId %>" class="badge bg-warning text-dark text-decoration-none border border-warning" style="font-size: 0.7rem;" title="Definir personal contratado">
-                                                            <i class="bi bi-pencil-square me-1"></i>Asignar
-                                                        </a>
                                                     <% } %>
                                                     <% if (p.aplica_turnos) { %>
                                                         <span class="badge bg-<%= p.turno_badge %>-subtle text-dark border border-<%= p.turno_badge %>-subtle" style="font-size: 0.72rem;">
@@ -186,7 +183,11 @@
                                                     <% } %>
                                                 </div>
                                                 <span class="badge-status-puesto">
-                                                    <% if (p.guardado) { %>
+                                                    <% if (p.cantidad_contratada <= 0) { %>
+                                                        <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.72rem;">
+                                                            <i class="bi bi-dash-circle me-1"></i> Sin personal (0)
+                                                        </span>
+                                                    <% } else if (p.guardado) { %>
                                                         <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: 0.72rem;">
                                                             <i class="bi bi-check-circle-fill me-1"></i> Registrado (<%= p.cantidad_asistentes %>)
                                                         </span>
@@ -214,10 +215,11 @@
                                                 <span class="input-group-text bg-light text-muted">
                                                     <i class="bi bi-people"></i>
                                                 </span>
+                                                <% const esCeroContratados = p.cantidad_contratada <= 0; %>
                                                 <input type="number" 
-                                                       class="form-control input-cantidad fw-bold text-center fs-5 <%= !p.editable ? 'bg-light text-muted' : '' %>" 
+                                                       class="form-control input-cantidad fw-bold text-center fs-5 <%= (!p.editable || esCeroContratados) ? 'bg-light text-muted' : '' %>" 
                                                        name="puestos[<%= p.key %>][cantidad]" 
-                                                       value="<%= p.cantidad_asistentes %>" 
+                                                       value="<%= esCeroContratados ? 0 : p.cantidad_asistentes %>" 
                                                        min="0" 
                                                        max="<%= p.cantidad_contratada %>" 
                                                        step="1"
@@ -225,8 +227,8 @@
                                                        data-key="<%= p.key %>"
                                                        data-nombre="<%= p.puesto_nombre %>"
                                                        data-max="<%= p.cantidad_contratada || 0 %>"
-                                                       data-requiere-plantilla="<%= p.cantidad_contratada <= 0 ? 'true' : 'false' %>"
-                                                       <%= !p.editable ? 'readonly' : '' %>>
+                                                       data-requiere-plantilla="<%= esCeroContratados ? 'true' : 'false' %>"
+                                                       <%= (!p.editable || esCeroContratados) ? 'readonly' : '' %>>
                                             </div>
                                             <% if (p.cantidad_contratada > 0) { %>
                                                 <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
@@ -234,7 +236,7 @@
                                                 </small>
                                             <% } else { %>
                                                 <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
-                                                    Plantilla: <strong>0 personas</strong>
+                                                    Plantilla en <strong>0</strong> (No requiere captura)
                                                 </small>
                                             <% } %>
                                             <input type="hidden" name="puestos[<%= p.key %>][id_puesto]" value="<%= p.id_puesto %>">
@@ -353,12 +355,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (typeof Swal !== 'undefined') {
                     Swal.fire({
                         title: 'Sin datos a guardar',
-                        text: 'No has ingresado la cantidad de personas en ningún puesto pendiente. Ingresa los valores en los puestos que deseas guardar ahora.',
+                        text: 'Ingresa la cantidad de asistentes en al menos un puesto disponible para registrar la jornada.',
                         icon: 'info',
                         confirmButtonColor: '#860063'
                     });
                 } else {
-                    alert('No has ingresado la cantidad de personas en ningún puesto pendiente.');
+                    alert('Ingresa la cantidad de asistentes en al menos un puesto disponible para registrar la jornada.');
                 }
             }
         });
