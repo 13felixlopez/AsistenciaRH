@@ -292,14 +292,28 @@ async function saveAsistencias(req, res) {
 
                 // Admin puede actualizar
                 const idAsistenciaExistente = check.recordset[0].id_asistencia;
-                await query(`
-                    UPDATE Asistencias_Diarias
-                    SET cantidad_asistentes = ?,
-                        observaciones = ?,
-                        id_usuario_modificacion = ?,
-                        fecha_modificacion = datetime('now', 'localtime')
-                    WHERE id_asistencia = ?
-                `, [cantidadVal, observacionesVal, user.id_usuario, idAsistenciaExistente]);
+                try {
+                    await query(`
+                        UPDATE Asistencias_Diarias
+                        SET cantidad_asistentes = ?,
+                            observaciones = ?,
+                            id_usuario_modificacion = ?,
+                            fecha_modificacion = datetime('now', 'localtime')
+                        WHERE id_asistencia = ?
+                    `, [cantidadVal, observacionesVal, user.id_usuario, idAsistenciaExistente]);
+                } catch (updErr) {
+                    if (updErr.message && updErr.message.includes('id_usuario_modificacion')) {
+                        await query(`
+                            UPDATE Asistencias_Diarias
+                            SET cantidad_asistentes = ?,
+                                observaciones = ?,
+                                fecha_modificacion = datetime('now', 'localtime')
+                            WHERE id_asistencia = ?
+                        `, [cantidadVal, observacionesVal, idAsistenciaExistente]);
+                    } else {
+                        throw updErr;
+                    }
+                }
                 actualizados++;
             } else {
                 // Nuevo registro
@@ -473,14 +487,28 @@ async function corregirAsistencia(req, res) {
             });
         }
 
-        await query(`
-            UPDATE Asistencias_Diarias
-            SET cantidad_asistentes = ?,
-                observaciones = ?,
-                id_usuario_modificacion = ?,
-                fecha_modificacion = datetime('now', 'localtime')
-            WHERE id_asistencia = ?
-        `, [nuevaCantidad, observaciones ? observaciones.trim() : null, user.id_usuario, id_asistencia]);
+        try {
+            await query(`
+                UPDATE Asistencias_Diarias
+                SET cantidad_asistentes = ?,
+                    observaciones = ?,
+                    id_usuario_modificacion = ?,
+                    fecha_modificacion = datetime('now', 'localtime')
+                WHERE id_asistencia = ?
+            `, [nuevaCantidad, observaciones ? observaciones.trim() : null, user.id_usuario, id_asistencia]);
+        } catch (updErr) {
+            if (updErr.message && updErr.message.includes('id_usuario_modificacion')) {
+                await query(`
+                    UPDATE Asistencias_Diarias
+                    SET cantidad_asistentes = ?,
+                        observaciones = ?,
+                        fecha_modificacion = datetime('now', 'localtime')
+                    WHERE id_asistencia = ?
+                `, [nuevaCantidad, observaciones ? observaciones.trim() : null, id_asistencia]);
+            } else {
+                throw updErr;
+            }
+        }
 
         return res.json({
             success: true,

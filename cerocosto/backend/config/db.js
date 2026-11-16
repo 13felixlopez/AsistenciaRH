@@ -19,8 +19,9 @@ let migrationChecked = false;
 async function verifyAndMigrateTurso() {
     if (migrationChecked) return;
     try {
-        const tableCheck = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Puestos'");
-        if (tableCheck.rows && tableCheck.rows.length > 0) {
+        // 1. Verificar y migrar Puestos
+        const puestoTableCheck = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Puestos'");
+        if (puestoTableCheck.rows && puestoTableCheck.rows.length > 0) {
             const tableInfo = await client.execute("PRAGMA table_info(Puestos)");
             if (tableInfo.rows && tableInfo.rows.length > 0) {
                 const hasCol = tableInfo.rows.some(r => r.name === 'cantidad_contratada');
@@ -29,9 +30,31 @@ async function verifyAndMigrateTurso() {
                     await client.execute("ALTER TABLE Puestos ADD COLUMN cantidad_contratada INTEGER NOT NULL DEFAULT 0");
                     console.log('✅ Columna cantidad_contratada agregada exitosamente en Turso DB.');
                 }
-                migrationChecked = true;
             }
         }
+
+        // 2. Verificar y migrar Asistencias_Diarias (id_usuario_modificacion y fecha_modificacion)
+        const asisTableCheck = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Asistencias_Diarias'");
+        if (asisTableCheck.rows && asisTableCheck.rows.length > 0) {
+            const asisInfo = await client.execute("PRAGMA table_info(Asistencias_Diarias)");
+            if (asisInfo.rows && asisInfo.rows.length > 0) {
+                const hasUserMod = asisInfo.rows.some(r => r.name === 'id_usuario_modificacion');
+                if (!hasUserMod) {
+                    console.log('🔄 Agregando columna id_usuario_modificacion a Asistencias_Diarias en Turso DB...');
+                    await client.execute("ALTER TABLE Asistencias_Diarias ADD COLUMN id_usuario_modificacion INTEGER");
+                    console.log('✅ Columna id_usuario_modificacion agregada exitosamente en Turso DB.');
+                }
+
+                const hasFechaMod = asisInfo.rows.some(r => r.name === 'fecha_modificacion');
+                if (!hasFechaMod) {
+                    console.log('🔄 Agregando columna fecha_modificacion a Asistencias_Diarias en Turso DB...');
+                    await client.execute("ALTER TABLE Asistencias_Diarias ADD COLUMN fecha_modificacion TEXT");
+                    console.log('✅ Columna fecha_modificacion agregada exitosamente en Turso DB.');
+                }
+            }
+        }
+
+        migrationChecked = true;
     } catch (err) {
         console.warn('Nota migración automática Turso:', err.message);
     }

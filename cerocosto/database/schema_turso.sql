@@ -99,10 +99,12 @@ CREATE TABLE IF NOT EXISTS Asistencias_Diarias (
     observaciones TEXT,
     id_usuario_registro INTEGER,
     fecha_registro TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    id_usuario_modificacion INTEGER,
     fecha_modificacion TEXT,
     FOREIGN KEY (id_puesto) REFERENCES Puestos(id_puesto) ON DELETE CASCADE,
     FOREIGN KEY (id_ubicacion) REFERENCES Ubicaciones(id_ubicacion) ON DELETE SET NULL,
-    FOREIGN KEY (id_usuario_registro) REFERENCES Usuarios(id_usuario) ON DELETE SET NULL
+    FOREIGN KEY (id_usuario_registro) REFERENCES Usuarios(id_usuario) ON DELETE SET NULL,
+    FOREIGN KEY (id_usuario_modificacion) REFERENCES Usuarios(id_usuario) ON DELETE SET NULL
 );
 
 -- Índices de Rendimiento y Clave Única para evitar duplicados en la misma jornada
