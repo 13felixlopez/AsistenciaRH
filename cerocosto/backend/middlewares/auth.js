@@ -92,7 +92,21 @@ function isNotSoloVista(req, res, next) {
 async function getUserAllowedAreas(userId, userRole) {
     const roleUpper = String(userRole || '').toUpperCase();
 
-    // 1. Si es Administrador, tiene acceso automático a TODAS las áreas activas
+    // 1. Si el usuario tiene áreas explícitamente asignadas en Usuario_Areas, respetarlas estrictamente
+    const assignedAreas = await query(`
+        SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
+               ua.permite_registro, ua.permite_reportes
+        FROM Areas a
+        INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
+        WHERE ua.id_usuario = ? AND a.activa = 1 AND ua.permite_registro = 1
+        ORDER BY a.nombre ASC
+    `, [userId]);
+
+    if (assignedAreas.recordset && assignedAreas.recordset.length > 0) {
+        return assignedAreas.recordset;
+    }
+
+    // 2. Si no tiene asignación específica pero es Administrador general, tiene acceso a todas las áreas
     if (roleUpper === 'ADMIN') {
         const result = await query(`
             SELECT id_area, codigo, nombre, descripcion, activa,
@@ -104,27 +118,28 @@ async function getUserAllowedAreas(userId, userRole) {
         return result.recordset;
     }
 
-    // 2. Si no es Admin, áreas explícitamente asignadas en Usuario_Areas
-    const assignedAreas = await query(`
-        SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
-               ua.permite_registro, ua.permite_reportes
-        FROM Areas a
-        INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
-        WHERE ua.id_usuario = ? AND a.activa = 1
-        ORDER BY a.nombre ASC
-    `, [userId]);
-
-    return assignedAreas.recordset;
+    // Usuario sin áreas asignadas
+    return [];
 }
 
 // Verificar si un usuario tiene acceso a un área específica
 async function hasAreaAccess(userId, userRole, areaId, type = 'any') {
     const roleUpper = String(userRole || '').toUpperCase();
-    if (roleUpper === 'ADMIN') {
+    const aId = parseInt(areaId, 10);
+
+    // Verificar si el usuario tiene asignaciones explícitas en Usuario_Areas
+    const countRes = await query(
+        'SELECT COUNT(*) AS total FROM Usuario_Areas WHERE id_usuario = ? AND permite_registro = 1',
+        [userId]
+    );
+
+    const hasSpecificAssignments = (countRes.recordset[0]?.total || 0) > 0;
+
+    // Solo un ADMIN global sin áreas asignadas específicas tiene acceso irrestricto
+    if (roleUpper === 'ADMIN' && !hasSpecificAssignments) {
         return true;
     }
 
-    const aId = parseInt(areaId, 10);
     let sql = `
         SELECT 1 
         FROM Usuario_Areas ua

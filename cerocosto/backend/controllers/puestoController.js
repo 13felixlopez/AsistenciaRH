@@ -215,26 +215,33 @@ async function showPlantilla(req, res) {
 async function getPlantillaData(req, res) {
     const areaId = req.params.areaId ? parseInt(req.params.areaId, 10) : (req.query.areaId ? parseInt(req.query.areaId, 10) : null);
     const user = req.user || req.session.user;
-    const isAdmin = Boolean(user && (String(user.rol_codigo || '').toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
 
     try {
-        let allowedAreas = [];
-        if (isAdmin) {
-            const allAreasRes = await query('SELECT id_area, codigo, nombre, descripcion, activa FROM Areas WHERE activa = 1 ORDER BY nombre ASC');
-            allowedAreas = allAreasRes.recordset;
-        } else {
-            const { getUserAllowedAreas } = require('../middlewares/auth');
-            allowedAreas = await getUserAllowedAreas(user.id_usuario, user.rol_codigo);
-        }
-
+        const { getUserAllowedAreas, hasAreaAccess } = require('../middlewares/auth');
+        const allowedAreas = await getUserAllowedAreas(user.id_usuario, user.rol_codigo);
         const areaIds = allowedAreas.map(a => a.id_area);
 
+        if (allowedAreas.length === 0) {
+            return res.json({
+                success: true,
+                areas: [],
+                selectedAreaId: null,
+                areaSeleccionada: null,
+                puestos: [],
+                totalContratados: 0,
+                message: 'No tienes áreas autorizadas para gestionar la plantilla.'
+            });
+        }
+
         let selectedAreaId = areaId;
-        if (!selectedAreaId && allowedAreas.length > 0) {
+        // Si no se especificó área o la solicitada no le pertenece, seleccionar la primera de sus áreas permitidas
+        if (!selectedAreaId || !areaIds.includes(selectedAreaId)) {
             selectedAreaId = allowedAreas[0].id_area;
         }
 
-        if (selectedAreaId && !isAdmin && !areaIds.includes(selectedAreaId)) {
+        // Validación de seguridad de acceso al área
+        const tieneAcceso = await hasAreaAccess(user.id_usuario, user.rol_codigo, selectedAreaId, 'registro');
+        if (!tieneAcceso) {
             return res.status(403).json({
                 success: false,
                 message: 'No tienes permisos asignados para gestionar la plantilla del área seleccionada.'
@@ -296,19 +303,16 @@ async function savePlantilla(req, res) {
         });
     }
 
-    try {
-        const isAdmin = Boolean(user && (String(user.rol_codigo || '').toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));
-        if (!isAdmin) {
-            const { getUserAllowedAreas } = require('../middlewares/auth');
-            const allowedAreas = await getUserAllowedAreas(user.id_usuario, user.rol_codigo);
-            const areaIds = allowedAreas.map(a => a.id_area);
+    const areaIdNum = parseInt(id_area, 10);
 
-            if (!areaIds.includes(parseInt(id_area, 10))) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'No tienes autorización para modificar la plantilla de esta área.'
-                });
-            }
+    try {
+        const { hasAreaAccess } = require('../middlewares/auth');
+        const tieneAcceso = await hasAreaAccess(user.id_usuario, user.rol_codigo, areaIdNum, 'registro');
+        if (!tieneAcceso) {
+            return res.status(403).json({
+                success: false,
+                message: 'No tienes autorización para modificar la plantilla de esta área.'
+            });
         }
 
         for (const item of listado) {
@@ -320,7 +324,7 @@ async function savePlantilla(req, res) {
                     UPDATE Puestos
                     SET cantidad_contratada = ?
                     WHERE id_puesto = ? AND id_area = ?
-                `, [cantidad, idPuesto, id_area]);
+                `, [cantidad, idPuesto, areaIdNum]);
             }
         }
 
