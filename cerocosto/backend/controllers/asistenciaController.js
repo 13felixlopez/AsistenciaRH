@@ -329,7 +329,7 @@ async function saveAsistencias(req, res) {
             const observacionesVal = item.observaciones ? String(item.observaciones).trim() : null;
 
             // Verificar si ya existe registro contemplando estandarización de turno
-            let checkSql = 'SELECT id_asistencia FROM Asistencias_Diarias WHERE fecha = ? AND id_puesto = ? AND (turno = ? OR REPLACE(UPPER(turno), " ", "_") = ?)';
+            let checkSql = "SELECT id_asistencia FROM Asistencias_Diarias WHERE fecha = ? AND id_puesto = ? AND (turno = ? OR REPLACE(UPPER(turno), ' ', '_') = ?)";
             const checkParams = [fecha, puestoId, turnoVal, turnoVal];
 
             if (ubicacionIdNum) {
