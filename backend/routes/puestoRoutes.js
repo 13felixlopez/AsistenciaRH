@@ -7,6 +7,8 @@ router.use(isAuthenticated);
 
 // Plantilla de personal contratado (accesible para Responsables de Área y Admins)
 router.get('/plantilla', isNotSoloVista, puestoController.getPlantillaData);
+router.get('/plantilla/data', isNotSoloVista, puestoController.getPlantillaData);
+router.get('/plantilla/data/:areaId', isNotSoloVista, puestoController.getPlantillaData);
 router.post('/plantilla/guardar', isNotSoloVista, puestoController.savePlantilla);
 
 // Catálogo general de puestos

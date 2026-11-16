@@ -292,14 +292,47 @@ async function getPlantillaData(req, res) {
 
 // API: Guardar la dotación presupuestada/contratada de puestos
 async function savePlantilla(req, res) {
-    const user = req.user || req.session.user;
-    const { id_area, plantilla, puestos } = req.body;
-    const listado = plantilla || puestos;
+    const user = req.user || (req.session && req.session.user);
+    if (!user) {
+        return res.status(401).json({ success: false, message: 'Sesión no válida o expirada.' });
+    }
 
-    if (!id_area || !listado || !Array.isArray(listado)) {
+    const { id_area } = req.body;
+    if (!id_area) {
         return res.status(400).json({
             success: false,
-            message: 'Parámetros inválidos. Debe proporcionar el área y la plantilla de puestos.'
+            message: 'Parámetros inválidos. Debe proporcionar el área.'
+        });
+    }
+
+    const rawData = req.body.plantilla || req.body.puestos;
+    let listado = [];
+    if (Array.isArray(rawData)) {
+        listado = rawData.map(p => ({
+            id_puesto: parseInt(p.id_puesto || p.id, 10),
+            cantidad_contratada: Math.max(0, parseInt(p.cantidad_contratada ?? p.cantidad ?? p.cant, 10) || 0)
+        }));
+    } else if (rawData && typeof rawData === 'object') {
+        listado = Object.keys(rawData).map(key => {
+            const val = rawData[key];
+            const pId = parseInt(key, 10);
+            if (val !== null && typeof val === 'object') {
+                return {
+                    id_puesto: parseInt(val.id_puesto || val.id || pId, 10),
+                    cantidad_contratada: Math.max(0, parseInt(val.cantidad_contratada ?? val.cantidad, 10) || 0)
+                };
+            }
+            return {
+                id_puesto: pId,
+                cantidad_contratada: Math.max(0, parseInt(val, 10) || 0)
+            };
+        });
+    }
+
+    if (listado.length === 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'Debe proporcionar la lista o datos de puestos para guardar la plantilla.'
         });
     }
 
@@ -315,22 +348,25 @@ async function savePlantilla(req, res) {
             });
         }
 
+        let actualizados = 0;
         for (const item of listado) {
             const idPuesto = parseInt(item.id_puesto, 10);
             const cantidad = Math.max(0, parseInt(item.cantidad_contratada, 10) || 0);
 
-            if (idPuesto) {
+            if (idPuesto && idPuesto > 0) {
                 await query(`
                     UPDATE Puestos
                     SET cantidad_contratada = ?
                     WHERE id_puesto = ? AND id_area = ?
                 `, [cantidad, idPuesto, areaIdNum]);
+                actualizados++;
             }
         }
 
         return res.json({
             success: true,
-            message: 'Plantilla de personal contratado actualizada exitosamente.'
+            actualizados,
+            message: `Plantilla de personal contratado actualizada exitosamente (${actualizados} cargos configurados).`
         });
     } catch (err) {
         console.error('Error al guardar plantilla:', err);

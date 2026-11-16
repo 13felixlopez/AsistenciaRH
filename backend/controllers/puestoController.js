@@ -286,13 +286,27 @@ async function savePlantilla(req, res) {
         }
 
         let listaPuestos = [];
-        if (Array.isArray(puestos)) {
-            listaPuestos = puestos;
-        } else if (puestos && typeof puestos === 'object') {
-            listaPuestos = Object.keys(puestos).map(id => ({
-                id_puesto: parseInt(id, 10),
-                cantidad_contratada: Math.max(0, parseInt(puestos[id], 10) || 0)
+        const rawData = req.body.plantilla || req.body.puestos;
+        if (Array.isArray(rawData)) {
+            listaPuestos = rawData.map(p => ({
+                id_puesto: parseInt(p.id_puesto || p.id, 10),
+                cantidad_contratada: Math.max(0, parseInt(p.cantidad_contratada ?? p.cantidad ?? p.cant, 10) || 0)
             }));
+        } else if (rawData && typeof rawData === 'object') {
+            listaPuestos = Object.keys(rawData).map(key => {
+                const val = rawData[key];
+                const pId = parseInt(key, 10);
+                if (val !== null && typeof val === 'object') {
+                    return {
+                        id_puesto: parseInt(val.id_puesto || val.id || pId, 10),
+                        cantidad_contratada: Math.max(0, parseInt(val.cantidad_contratada ?? val.cantidad, 10) || 0)
+                    };
+                }
+                return {
+                    id_puesto: pId,
+                    cantidad_contratada: Math.max(0, parseInt(val, 10) || 0)
+                };
+            });
         }
 
         let actualizados = 0;

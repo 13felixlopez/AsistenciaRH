@@ -215,13 +215,13 @@
                                                     <i class="bi bi-people"></i>
                                                 </span>
                                                 <input type="number" 
-                                                       class="form-control input-cantidad fw-bold text-center fs-5 <%= !p.editable ? 'bg-light text-muted' : '' %> <%= p.cantidad_contratada <= 0 ? 'border-danger-subtle bg-danger-subtle text-danger' : '' %>" 
+                                                       class="form-control input-cantidad fw-bold text-center fs-5 <%= !p.editable ? 'bg-light text-muted' : '' %>" 
                                                        name="puestos[<%= p.key %>][cantidad]" 
                                                        value="<%= p.cantidad_asistentes %>" 
                                                        min="0" 
-                                                       max="<%= p.cantidad_contratada > 0 ? p.cantidad_contratada : 0 %>" 
+                                                       max="<%= p.cantidad_contratada %>" 
                                                        step="1"
-                                                       placeholder="<%= p.cantidad_contratada <= 0 ? 'Plantilla 0' : '' %>"
+                                                       placeholder=""
                                                        data-key="<%= p.key %>"
                                                        data-nombre="<%= p.puesto_nombre %>"
                                                        data-max="<%= p.cantidad_contratada || 0 %>"
@@ -233,8 +233,8 @@
                                                     Máximo permitido: <strong><%= p.cantidad_contratada %></strong>
                                                 </small>
                                             <% } else { %>
-                                                <small class="text-danger fw-semibold d-block text-center mt-1" style="font-size: 0.7rem;">
-                                                    <i class="bi bi-lock-fill me-1"></i>Registre contratados antes de capturar
+                                                <small class="text-muted d-block text-center mt-1" style="font-size: 0.7rem;">
+                                                    Plantilla: <strong>0 personas</strong>
                                                 </small>
                                             <% } %>
                                             <input type="hidden" name="puestos[<%= p.key %>][id_puesto]" value="<%= p.id_puesto %>">
@@ -322,37 +322,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     const val = parseInt(inp.value.trim(), 10);
                     const max = parseInt(inp.getAttribute('data-max'), 10) || 0;
                     const nombre = inp.getAttribute('data-nombre') || 'un puesto';
-                    const requierePlantilla = inp.getAttribute('data-requiere-plantilla') === 'true';
 
-                    if (requierePlantilla && !errorPlantilla) {
-                        errorPlantilla = `El puesto "${nombre}" está activo pero tiene su plantilla de personal contratado en 0. Por normativa del sistema, debe registrar la cantidad de personal contratado en la sección de Plantilla antes de capturar la asistencia.`;
-                    } else if (max > 0 && val > max && !errorExceso) {
-                        errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${max} personas. La cantidad ingresada (${val}) sobrepasa dicho límite.`;
+                    if (val > max && !errorExceso) {
+                        if (max === 0) {
+                            errorExceso = `El puesto "${nombre}" tiene una plantilla autorizada de 0 personas. Para registrar ${val} asistentes, debe configurar primero el personal contratado en la sección de Plantilla.`;
+                        } else {
+                            errorExceso = `El puesto "${nombre}" tiene una plantilla contratada de ${max} personas. La cantidad ingresada (${val}) sobrepasa dicho límite.`;
+                        }
                     }
                 }
             });
-
-            if (errorPlantilla) {
-                e.preventDefault();
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire({
-                        title: 'Plantilla de Personal Requerida',
-                        text: errorPlantilla,
-                        icon: 'warning',
-                        confirmButtonColor: '#860063',
-                        showCancelButton: true,
-                        confirmButtonText: '<i class="bi bi-people-fill me-1"></i> Ir a Definir Plantilla',
-                        cancelButtonText: 'Regresar'
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            window.location.href = `/puestos/plantilla?areaId=<%= selectedAreaId %>`;
-                        }
-                    });
-                } else {
-                    alert(errorPlantilla);
-                }
-                return;
-            }
 
             if (errorExceso) {
                 e.preventDefault();

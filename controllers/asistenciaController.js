@@ -174,8 +174,8 @@ async function showRegistroForm(req, res) {
                         const key = `${p.id_puesto}_${t.turno}`;
                         const asis = asistsMap[key] || null;
                         const guardado = !!asis;
-                        // Solo el admin puede editar registros ya guardados. Si el puesto está activo pero con plantilla en 0, se bloquea la captura.
-                        const editable = (isAdmin || !guardado) && !requierePlantilla;
+                        // Solo el admin puede editar registros ya guardados. Si está pendiente, cualquiera con permiso puede registrar.
+                        const editable = isAdmin || !guardado;
 
                         slotsConAsistencia.push({
                             key,
@@ -348,17 +348,14 @@ async function saveAsistencias(req, res) {
                         const esActivo = (pMeta.activo === 1 || pMeta.activo === true || pMeta.activo === '1');
                         const contratada = parseInt(pMeta.cantidad_contratada, 10) || 0;
 
-                        // REGLA 1: Puesto activo con plantilla en 0 -> OBLIGAR a registrar cantidad contratada antes de registrar asistencia
-                        if (esActivo && contratada === 0) {
-                            throw new Error(`El puesto "${pMeta.nombre}" está activo pero tiene plantilla de personal contratado en 0. Debe registrar la cantidad de personal por cargo en la sección de Plantilla antes de capturar la asistencia.`);
+                        // La cantidad de asistentes no puede superar el límite contratado en plantilla
+                        if (esActivo && cantNum > contratada) {
+                            if (contratada === 0) {
+                                throw new Error(`El puesto "${pMeta.nombre}" tiene una plantilla autorizada de 0 personas. Para registrar ${cantNum} asistentes, configure primero el personal contratado en la sección de Plantilla.`);
+                            } else {
+                                throw new Error(`El puesto "${pMeta.nombre}" tiene una plantilla contratada de ${contratada} personas. La cantidad ingresada (${cantNum}) sobrepasa dicho límite.`);
+                            }
                         }
-
-                        // REGLA 2: Puesto activo con plantilla > 0 -> asistencia no puede ser mayor al número contratado
-                        if (esActivo && contratada > 0 && cantNum > contratada) {
-                            throw new Error(`El puesto "${pMeta.nombre}" tiene una plantilla contratada de ${contratada} personas. La cantidad ingresada (${cantNum}) sobrepasa dicho límite.`);
-                        }
-
-                        // REGLA 3: Puesto inactivo con plantilla en 0 -> no importa que pase, permitido
                     }
                 }
 
@@ -513,18 +510,18 @@ async function corregirAsistencia(req, res) {
         const esActivo = asis.activo === 1 || asis.activo === true || asis.activo === '1';
         const contratada = parseInt(asis.cantidad_contratada, 10) || 0;
 
-        if (esActivo && contratada === 0) {
-            return res.status(400).json({
-                success: false,
-                message: `No se puede guardar: El puesto "${asis.puesto_nombre}" está activo pero tiene plantilla contratada en 0. Debe registrar la cantidad de personal contratado antes de registrar la asistencia.`
-            });
-        }
-
-        if (esActivo && contratada > 0 && cantNum > contratada) {
-            return res.status(400).json({
-                success: false,
-                message: `No se puede guardar: El puesto "${asis.puesto_nombre}" tiene un tope de personal contratado de ${contratada}. La cantidad ingresada (${cantNum}) lo sobrepasa.`
-            });
+        if (esActivo && cantNum > contratada) {
+            if (contratada === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `No se puede guardar: El puesto "${asis.puesto_nombre}" tiene una plantilla autorizada de 0 personas. Configure primero el personal contratado en Plantilla.`
+                });
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: `No se puede guardar: El puesto "${asis.puesto_nombre}" tiene un tope de personal contratado de ${contratada}. La cantidad ingresada (${cantNum}) lo sobrepasa.`
+                });
+            }
         }
 
         await pool.request()

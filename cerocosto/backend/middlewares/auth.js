@@ -92,21 +92,7 @@ function isNotSoloVista(req, res, next) {
 async function getUserAllowedAreas(userId, userRole) {
     const roleUpper = String(userRole || '').toUpperCase();
 
-    // 1. Si el usuario tiene áreas explícitamente asignadas en Usuario_Areas, respetarlas estrictamente
-    const assignedAreas = await query(`
-        SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
-               ua.permite_registro, ua.permite_reportes
-        FROM Areas a
-        INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
-        WHERE ua.id_usuario = ? AND a.activa = 1 AND ua.permite_registro = 1
-        ORDER BY a.nombre ASC
-    `, [userId]);
-
-    if (assignedAreas.recordset && assignedAreas.recordset.length > 0) {
-        return assignedAreas.recordset;
-    }
-
-    // 2. Si no tiene asignación específica pero es Administrador general, tiene acceso a todas las áreas
+    // 1. Si es Administrador general, tiene acceso irrestricto a todas las áreas activas
     if (roleUpper === 'ADMIN') {
         const result = await query(`
             SELECT id_area, codigo, nombre, descripcion, activa,
@@ -118,28 +104,27 @@ async function getUserAllowedAreas(userId, userRole) {
         return result.recordset;
     }
 
-    // Usuario sin áreas asignadas
-    return [];
+    // 2. Si el usuario no es admin, consultar áreas explícitamente asignadas en Usuario_Areas
+    const assignedAreas = await query(`
+        SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
+               ua.permite_registro, ua.permite_reportes
+        FROM Areas a
+        INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
+        WHERE ua.id_usuario = ? AND a.activa = 1 AND ua.permite_registro = 1
+        ORDER BY a.nombre ASC
+    `, [userId]);
+
+    return assignedAreas.recordset || [];
 }
 
 // Verificar si un usuario tiene acceso a un área específica
 async function hasAreaAccess(userId, userRole, areaId, type = 'any') {
     const roleUpper = String(userRole || '').toUpperCase();
-    const aId = parseInt(areaId, 10);
-
-    // Verificar si el usuario tiene asignaciones explícitas en Usuario_Areas
-    const countRes = await query(
-        'SELECT COUNT(*) AS total FROM Usuario_Areas WHERE id_usuario = ? AND permite_registro = 1',
-        [userId]
-    );
-
-    const hasSpecificAssignments = (countRes.recordset[0]?.total || 0) > 0;
-
-    // Solo un ADMIN global sin áreas asignadas específicas tiene acceso irrestricto
-    if (roleUpper === 'ADMIN' && !hasSpecificAssignments) {
+    if (roleUpper === 'ADMIN') {
         return true;
     }
 
+    const aId = parseInt(areaId, 10);
     let sql = `
         SELECT 1 
         FROM Usuario_Areas ua
@@ -161,15 +146,9 @@ async function hasAreaAccess(userId, userRole, areaId, type = 'any') {
 // Obtener las ubicaciones permitidas para un usuario dentro de un área
 async function getUserAllowedLocations(userId, userRole, areaId) {
     const aId = parseInt(areaId, 10);
+    const roleUpper = String(userRole || '').toUpperCase();
 
-    const countRes = await query(
-        'SELECT COUNT(*) AS total FROM Usuario_Ubicaciones WHERE id_usuario = ?',
-        [userId]
-    );
-
-    const hasSpecificLocations = (countRes.recordset[0]?.total || 0) > 0;
-
-    if (userRole === 'ADMIN' && !hasSpecificLocations) {
+    if (roleUpper === 'ADMIN') {
         const result = await query(`
             SELECT id_ubicacion, id_area, codigo, nombre, descripcion, activa
             FROM Ubicaciones
@@ -177,32 +156,27 @@ async function getUserAllowedLocations(userId, userRole, areaId) {
             ORDER BY nombre ASC
         `, [aId]);
         return result.recordset;
-    } else {
-        const result = await query(`
-            SELECT u.id_ubicacion, u.id_area, u.codigo, u.nombre, u.descripcion, u.activa
-            FROM Ubicaciones u
-            INNER JOIN Usuario_Ubicaciones uu ON u.id_ubicacion = uu.id_ubicacion
-            WHERE uu.id_usuario = ? AND u.id_area = ? AND u.activa = 1
-            ORDER BY u.nombre ASC
-        `, [userId, aId]);
-        return result.recordset;
     }
+
+    const result = await query(`
+        SELECT u.id_ubicacion, u.id_area, u.codigo, u.nombre, u.descripcion, u.activa
+        FROM Ubicaciones u
+        INNER JOIN Usuario_Ubicaciones uu ON u.id_ubicacion = uu.id_ubicacion
+        WHERE uu.id_usuario = ? AND u.id_area = ? AND u.activa = 1
+        ORDER BY u.nombre ASC
+    `, [userId, aId]);
+    return result.recordset;
 }
 
 // Verificar si el usuario tiene acceso a una ubicación específica
 async function hasLocationAccess(userId, userRole, areaId, locationId) {
-    const aId = parseInt(areaId, 10);
-    const lId = locationId ? parseInt(locationId, 10) : null;
-
-    const countRes = await query(
-        'SELECT COUNT(*) AS total FROM Usuario_Ubicaciones WHERE id_usuario = ?',
-        [userId]
-    );
-
-    const hasSpecificLocations = (countRes.recordset[0]?.total || 0) > 0;
-    if (userRole === 'ADMIN' && !hasSpecificLocations) {
+    const roleUpper = String(userRole || '').toUpperCase();
+    if (roleUpper === 'ADMIN') {
         return true;
     }
+
+    const aId = parseInt(areaId, 10);
+    const lId = locationId ? parseInt(locationId, 10) : null;
 
     if (!lId) {
         return hasAreaAccess(userId, userRole, aId);
