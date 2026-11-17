@@ -8,7 +8,7 @@ const cors = require('cors');
 const expressLayouts = require('express-ejs-layouts');
 
 const { getPool } = require('./config/db');
-const { isAuthenticated } = require('./middlewares/auth');
+const { isAuthenticated, isSoloVistaUser } = require('./middlewares/auth');
 
 // Rutas
 const authRoutes = require('./routes/authRoutes');
@@ -79,6 +79,9 @@ app.get('/', (req, res) => {
     if (req.session && req.session.user) {
         if (req.session.user.rol_codigo === 'ADMIN') {
             return res.redirect('/dashboard');
+        }
+        if (isSoloVistaUser(req.session.user)) {
+            return res.redirect('/reportes');
         }
         return res.redirect('/asistencias/registro');
     }

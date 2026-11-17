@@ -410,12 +410,12 @@ async function saveAsistencias(req, res) {
 // Historial de asistencias
 async function listHistorial(req, res) {
     const user = req.user || req.session.user;
-    const hoy = new Date();
-    const sieteDiasAtras = new Date(hoy);
-    sieteDiasAtras.setDate(sieteDiasAtras.getDate() - 7);
+    const hoyStr = getLocalDateStr();
+    const sieteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const fechaInicioDefault = getLocalDateStr(sieteDiasAtras);
 
-    const fechaInicio = req.query.fechaInicio || sieteDiasAtras.toISOString().split('T')[0];
-    const fechaFin = req.query.fechaFin || hoy.toISOString().split('T')[0];
+    const fechaInicio = req.query.fechaInicio || fechaInicioDefault;
+    const fechaFin = req.query.fechaFin || hoyStr;
     const areaId = req.query.areaId ? parseInt(req.query.areaId, 10) : null;
     const ubicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
 

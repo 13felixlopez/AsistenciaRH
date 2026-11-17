@@ -1,5 +1,6 @@
 const { getPool, sql } = require('../config/db');
 const { getUserAllowedAreas } = require('../middlewares/auth');
+const { getLocalDateStr } = require('../services/asistenciaService');
 
 async function showDashboard(req, res) {
     try {
@@ -26,13 +27,16 @@ async function showDashboard(req, res) {
             `);
             totalPuestos = puestosRes.recordset[0].total;
 
-            // Contar asistencias registradas hoy en las áreas permitidas
-            const asistenciasHoyRes = await pool.request().query(`
-                SELECT ISNULL(SUM(a.cantidad_asistentes), 0) AS total_personas
-                FROM Asistencias_Diarias a
-                INNER JOIN Puestos p ON a.id_puesto = p.id_puesto
-                WHERE p.id_area IN (${areaIdsList}) AND a.fecha = CAST(GETDATE() AS DATE)
-            `);
+            // Contar asistencias registradas hoy en las áreas permitidas (según fecha local de Nicaragua)
+            const hoyLocal = getLocalDateStr();
+            const asistenciasHoyRes = await pool.request()
+                .input('hoyLocal', sql.Date, hoyLocal)
+                .query(`
+                    SELECT ISNULL(SUM(a.cantidad_asistentes), 0) AS total_personas
+                    FROM Asistencias_Diarias a
+                    INNER JOIN Puestos p ON a.id_puesto = p.id_puesto
+                    WHERE p.id_area IN (${areaIdsList}) AND a.fecha = @hoyLocal
+                `);
             totalAsistenciasHoy = asistenciasHoyRes.recordset[0].total_personas;
 
             // Últimos 8 registros de asistencia con datos de área, ubicación y puesto
@@ -65,17 +69,19 @@ async function showDashboard(req, res) {
         let graficoDias = [];
         if (areaIds.length > 0) {
             const areaIdsList = areaIds.join(',');
-            const chartRes = await pool.request().query(`
-                SELECT 
-                    ad.fecha,
-                    SUM(ad.cantidad_asistentes) AS total_asistencias
-                FROM Asistencias_Diarias ad
-                INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
-                WHERE p.id_area IN (${areaIdsList}) 
-                  AND ad.fecha >= DATEADD(day, -7, CAST(GETDATE() AS DATE))
-                GROUP BY ad.fecha
-                ORDER BY ad.fecha ASC
-            `);
+            const chartRes = await pool.request()
+                .input('hoyLocal', sql.Date, hoyLocal)
+                .query(`
+                    SELECT 
+                        ad.fecha,
+                        SUM(ad.cantidad_asistentes) AS total_asistencias
+                    FROM Asistencias_Diarias ad
+                    INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
+                    WHERE p.id_area IN (${areaIdsList}) 
+                      AND ad.fecha >= DATEADD(day, -7, @hoyLocal)
+                    GROUP BY ad.fecha
+                    ORDER BY ad.fecha ASC
+                `);
             graficoDias = chartRes.recordset;
         }
 

@@ -216,17 +216,21 @@
             const totalesRegistros = document.getElementById('totalesRegistros');
             const totalesPersonas = document.getElementById('totalesPersonas');
 
-            // Fechas por defecto: últimos 7 días
-            const dHoy = new Date();
-            const dSieteAtras = new Date();
-            dSieteAtras.setDate(dHoy.getDate() - 7);
+            function getNicaDate(d = new Date()) {
+                return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+            }
 
-            fechaInicioInput.value = dSieteAtras.toISOString().split('T')[0];
-            fechaFinInput.value = dHoy.toISOString().split('T')[0];
+            // Fechas por defecto: últimos 7 días
+            const hoyStr = getNicaDate();
+            const dSieteAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const fechaInicioDef = getNicaDate(dSieteAtras);
+
+            fechaInicioInput.value = fechaInicioDef;
+            fechaFinInput.value = hoyStr;
 
             btnLimpiar.addEventListener('click', () => {
-                fechaInicioInput.value = dSieteAtras.toISOString().split('T')[0];
-                fechaFinInput.value = dHoy.toISOString().split('T')[0];
+                fechaInicioInput.value = fechaInicioDef;
+                fechaFinInput.value = hoyStr;
                 selectArea.value = '';
                 selectUbicacion.value = '';
                 selectUbicacion.disabled = true;
@@ -297,7 +301,7 @@
                     // Renderizar Filas
                     const asistencias = data.asistencias || [];
                     if (asistencias.length > 0) {
-                        const hoyStr = new Date().toISOString().split('T')[0];
+                        const hoyStr = getNicaDate();
 
                         tbodyHistorial.innerHTML = asistencias.map(item => {
                             let turnoBadge = '';

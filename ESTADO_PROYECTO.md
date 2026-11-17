@@ -77,6 +77,16 @@
    - Se corrigió pasando la fecha local del sistema (`@fechaHoyLocal` obtenido con `getLocalDateStr()`) a la consulta SQL, asegurando que la jornada del día actual jamás sea cerrada con 0 mientras sea el día actual local.
    - Se eliminó el `placeholder="0"` confuso en las vistas (`registro.ejs` y `asistencias-registro.html`), dejándolo en blanco para puestos no capturados con su badge correspondiente en "Pendiente", permitiendo que supervisores guarden Turno 1 por la mañana y capturen Turno 2 más tarde sin bloqueo.
 
+11. **Corrección de Acceso a Áreas para Rol Solo Vista (Consultor):**
+   - Se corrigió `getUserAllowedAreas` en los middlewares de autenticación, removiendo la restricción indebida `AND ua.permite_registro = 1` que impedía cargar las áreas asignadas a usuarios consultores (`permite_registro = 0`, `permite_reportes = 1`).
+   - Ahora los usuarios de Solo Vista visualizan correctamente sus áreas autorizadas en el combobox de Reportes, Historial y Panel Principal, permitiendo consultar datos y métricas sin restricciones indebidas.
+   - Se habilitó la redirección directa a `/reportes` en la raíz `/` para usuarios de Solo Vista, evitando falsos bloqueos de acceso denegado.
+
+12. **Fijación Estricta de Zona Horaria Oficial Nicaragua (America/Managua, UTC-6):**
+   - Se corrigió el cálculo de fechas en backend (`getLocalDateStr`) y frontend/vistas reemplazando `toISOString().split('T')[0]` y métodos locales del servidor dependientes de UTC por `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua' })`.
+   - Se eliminó la dependencia de `CAST(GETDATE() AS DATE)` en el Dashboard pasando `@hoyLocal` parametrizado.
+   - Con esto se garantiza que ni en la tarde (5:00 PM / 6:00 PM) ni en ningún horario previo a la medianoche local el sistema adelante la fecha de captura al día siguiente.
+
 ---
 
 ## 🛠️ Scripts y Migraciones Creadas

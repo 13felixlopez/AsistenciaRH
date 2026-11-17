@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 const { getUserAllowedAreas } = require('../middlewares/auth');
+const { getLocalDateStr } = require('../services/asistenciaService');
 
 async function showDashboard(req, res) {
     try {
@@ -25,13 +26,14 @@ async function showDashboard(req, res) {
             `, areaIds);
             totalPuestos = puestosRes.recordset[0]?.total || 0;
 
-            // Contar asistencias registradas hoy en las áreas permitidas
+            // Contar asistencias registradas hoy en las áreas permitidas (según fecha local de Nicaragua)
+            const hoyLocal = getLocalDateStr();
             const asistenciasHoyRes = await query(`
                 SELECT COALESCE(SUM(a.cantidad_asistentes), 0) AS total_personas
                 FROM Asistencias_Diarias a
                 INNER JOIN Puestos p ON a.id_puesto = p.id_puesto
-                WHERE p.id_area IN (${placeholders}) AND a.fecha = date('now', 'localtime')
-            `, areaIds);
+                WHERE p.id_area IN (${placeholders}) AND a.fecha = ?
+            `, [...areaIds, hoyLocal]);
             totalAsistenciasHoy = asistenciasHoyRes.recordset[0]?.total_personas || 0;
 
             // Últimos 8 registros de asistencia
@@ -65,6 +67,8 @@ async function showDashboard(req, res) {
         let graficoDias = [];
         if (areaIds.length > 0) {
             const placeholders = areaIds.map(() => '?').join(',');
+            const sieteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const fechaMin = getLocalDateStr(sieteDiasAtras);
             const chartRes = await query(`
                 SELECT 
                     ad.fecha AS fecha,
@@ -72,10 +76,10 @@ async function showDashboard(req, res) {
                 FROM Asistencias_Diarias ad
                 INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
                 WHERE p.id_area IN (${placeholders}) 
-                  AND ad.fecha >= date('now', 'localtime', '-7 days')
+                  AND ad.fecha >= ?
                 GROUP BY ad.fecha
                 ORDER BY ad.fecha ASC
-            `, areaIds);
+            `, [...areaIds, fechaMin]);
             graficoDias = chartRes.recordset;
         }
 

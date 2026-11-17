@@ -150,7 +150,11 @@ async function createUser(req, res) {
             const newUserId = insertUserRes.recordset[0].id_usuario;
 
             // Procesar asignación de áreas
-            const isSoloVista = parseInt(id_rol, 10) === 3;
+            const roleRes = await new sql.Request(transaction)
+                .input('id_rol', sql.Int, parseInt(id_rol, 10))
+                .query('SELECT codigo FROM Roles WHERE id_rol = @id_rol');
+            const rolCodigo = roleRes.recordset[0]?.codigo;
+            const isSoloVista = rolCodigo === 'CONSULTOR' || rolCodigo === 'SOLO_VISTA' || parseInt(id_rol, 10) === 3;
             const permiteRegistro = isSoloVista ? 0 : 1;
             const permiteReportes = 1;
 
@@ -353,7 +357,11 @@ async function updateUser(req, res) {
                 .input('id', sql.Int, id)
                 .query('DELETE FROM Usuario_Areas WHERE id_usuario = @id');
 
-            const isSoloVista = parseInt(id_rol, 10) === 3;
+            const roleRes = await new sql.Request(transaction)
+                .input('id_rol', sql.Int, parseInt(id_rol, 10))
+                .query('SELECT codigo FROM Roles WHERE id_rol = @id_rol');
+            const rolCodigo = roleRes.recordset[0]?.codigo;
+            const isSoloVista = rolCodigo === 'CONSULTOR' || rolCodigo === 'SOLO_VISTA' || parseInt(id_rol, 10) === 3;
             const permiteRegistro = isSoloVista ? 0 : 1;
             const permiteReportes = 1;
 

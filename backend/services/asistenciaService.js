@@ -1,11 +1,13 @@
 const { sql, getPool } = require('../config/db');
 
-// Obtener fecha local en formato YYYY-MM-DD
+// Obtener fecha local de Nicaragua (America/Managua, UTC-6) en formato YYYY-MM-DD
 function getLocalDateStr(d = new Date()) {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Managua',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(d);
 }
 
 /**
@@ -129,5 +131,6 @@ async function autocompletarAsistenciasPasadas(fechaEspecifica = null, idArea = 
 }
 
 module.exports = {
-    autocompletarAsistenciasPasadas
+    autocompletarAsistenciasPasadas,
+    getLocalDateStr
 };

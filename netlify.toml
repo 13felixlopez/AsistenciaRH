@@ -3,6 +3,9 @@
   publish = "frontend"
   functions = "netlify/functions"
 
+[build.environment]
+  TZ = "America/Managua"
+
 # Redirección de llamadas a la API hacia la función serverless de Netlify
 [[redirects]]
   from = "/api/*"

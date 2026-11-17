@@ -2,12 +2,14 @@ const { getPool, sql } = require('../config/db');
 const { getUserAllowedAreas, hasAreaAccess, getUserAllowedLocations, hasLocationAccess, isSoloVistaUser } = require('../middlewares/auth');
 const { autocompletarAsistenciasPasadas } = require('../services/asistenciaService');
 
-// Obtener fecha local en formato YYYY-MM-DD
+// Obtener fecha local de Nicaragua (America/Managua, UTC-6) en formato YYYY-MM-DD
 function getLocalDateStr(d = new Date()) {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Managua',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(d);
 }
 
 // Normalizar identificador de turno
@@ -550,12 +552,12 @@ async function listHistorial(req, res) {
     const pool = await getPool();
 
     // Fechas por defecto: últimos 7 días
-    const hoy = new Date();
-    const sieteDiasAtras = new Date();
-    sieteDiasAtras.setDate(hoy.getDate() - 7);
+    const hoyStr = getLocalDateStr();
+    const sieteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const fechaInicioDefault = getLocalDateStr(sieteDiasAtras);
 
-    const fechaInicio = req.query.fechaInicio || sieteDiasAtras.toISOString().split('T')[0];
-    const fechaFin = req.query.fechaFin || hoy.toISOString().split('T')[0];
+    const fechaInicio = req.query.fechaInicio || fechaInicioDefault;
+    const fechaFin = req.query.fechaFin || hoyStr;
     const areaId = req.query.areaId ? parseInt(req.query.areaId, 10) : null;
     const ubicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
     const isAdmin = Boolean(user && (String(user.rol_codigo).toUpperCase() === 'ADMIN' || user.id_rol === 1 || user.email === 'admin@asistencia.com'));

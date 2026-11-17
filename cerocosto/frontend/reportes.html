@@ -241,9 +241,13 @@
             let currentTipo = 'detalle_puesto';
             let chartInstance = null;
 
-            const hoy = new Date();
-            const dosSemanasAtras = new Date();
-            dosSemanasAtras.setDate(hoy.getDate() - 14);
+            function getNicaDate(d = new Date()) {
+                return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Managua', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+            }
+
+            const hoyStr = getNicaDate();
+            const dosSemanasAtras = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+            const fechaInicioDef = getNicaDate(dosSemanasAtras);
 
             const fechaInicioInput = document.getElementById('fechaInicio');
             const fechaFinInput = document.getElementById('fechaFin');
@@ -259,9 +263,9 @@
             const formReportes = document.getElementById('formReportes');
             const btnExportarExcel = document.getElementById('btnExportarExcel');
 
-            fechaInicioInput.value = dosSemanasAtras.toISOString().split('T')[0];
-            fechaFinInput.value = hoy.toISOString().split('T')[0];
-            fechaDiarioInput.value = hoy.toISOString().split('T')[0];
+            fechaInicioInput.value = fechaInicioDef;
+            fechaFinInput.value = hoyStr;
+            fechaDiarioInput.value = hoyStr;
 
             // Cambio de Pestañas
             const tabs = document.querySelectorAll('#reportTabs button');

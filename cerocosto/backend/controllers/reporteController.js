@@ -1,21 +1,20 @@
 const ExcelJS = require('exceljs');
 const { query } = require('../config/db');
 const { getUserAllowedAreas, getUserAllowedLocations } = require('../middlewares/auth');
-const { autocompletarAsistenciasPasadas } = require('../services/asistenciaService');
+const { autocompletarAsistenciasPasadas, getLocalDateStr } = require('../services/asistenciaService');
 
 // Vista principal de reportes con filtros interactivos
 async function showReportes(req, res) {
     const user = req.user || req.session.user;
 
-    const hoy = new Date();
-    const hoyStr = hoy.toISOString().split('T')[0];
-    const catorceDiasAtras = new Date();
-    catorceDiasAtras.setDate(hoy.getDate() - 14);
+    const hoyStr = getLocalDateStr();
+    const catorceDiasAtras = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const fechaInicioDefault = getLocalDateStr(catorceDiasAtras);
 
     const tipoReporte = req.query.tipo || 'detalle_puesto'; // 'detalle_puesto', 'resumen_area', 'diario'
-    const fechaInicio = req.query.fechaInicio || catorceDiasAtras.toISOString().split('T')[0];
-    const fechaFin = req.query.fechaFin || hoy.toISOString().split('T')[0];
-    const fechaDiario = req.query.fechaDiario || hoy.toISOString().split('T')[0];
+    const fechaInicio = req.query.fechaInicio || fechaInicioDefault;
+    const fechaFin = req.query.fechaFin || hoyStr;
+    const fechaDiario = req.query.fechaDiario || hoyStr;
     const areaId = req.query.areaId ? parseInt(req.query.areaId, 10) : null;
     const ubicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
     const puestoId = req.query.puestoId ? parseInt(req.query.puestoId, 10) : null;
@@ -399,10 +398,14 @@ async function showReportes(req, res) {
 async function exportExcel(req, res) {
     const user = req.user || req.session.user;
 
+    const hoyStr = getLocalDateStr();
+    const catorceDiasAtras = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const fechaInicioDefault = getLocalDateStr(catorceDiasAtras);
+
     const tipo = req.query.tipo || 'detalle_puesto';
-    const fechaInicio = req.query.fechaInicio || new Date().toISOString().split('T')[0];
-    const fechaFin = req.query.fechaFin || new Date().toISOString().split('T')[0];
-    const fechaDiario = req.query.fechaDiario || new Date().toISOString().split('T')[0];
+    const fechaInicio = req.query.fechaInicio || fechaInicioDefault;
+    const fechaFin = req.query.fechaFin || hoyStr;
+    const fechaDiario = req.query.fechaDiario || hoyStr;
     const areaId = req.query.areaId ? parseInt(req.query.areaId, 10) : null;
     const ubicacionId = req.query.ubicacionId ? parseInt(req.query.ubicacionId, 10) : null;
     const puestoId = req.query.puestoId ? parseInt(req.query.puestoId, 10) : null;
@@ -728,7 +731,7 @@ async function exportExcel(req, res) {
         });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename=Reporte_Asistencias_${tipo}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        res.setHeader('Content-Disposition', `attachment; filename=Reporte_Asistencias_${tipo}_${hoyStr}.xlsx`);
 
         await workbook.xlsx.write(res);
         res.end();

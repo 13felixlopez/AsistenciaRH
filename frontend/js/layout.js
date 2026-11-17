@@ -8,8 +8,9 @@ function initAppLayout(activeKey = '') {
     const isSoloVista = user.rol_codigo === 'CONSULTOR' || user.rol_codigo === 'SOLO_VISTA' || user.id_rol === 3;
     const userInitial = (user.nombre || 'U').charAt(0).toUpperCase();
 
-    // Fecha actual en español
+    // Fecha actual en español (Zona Horaria Oficial: Nicaragua)
     const fechaActualStr = new Date().toLocaleDateString('es-ES', {
+        timeZone: 'America/Managua',
         weekday: 'long',
         year: 'numeric',
         month: 'long',
