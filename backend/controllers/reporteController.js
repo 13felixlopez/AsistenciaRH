@@ -12,7 +12,7 @@ async function showReportes(req, res) {
     const catorceDiasAtras = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
     const fechaInicioDefault = getLocalDateStr(catorceDiasAtras);
 
-    const tipoReporte = req.query.tipo || 'detalle_puesto'; // 'detalle_puesto', 'resumen_area', 'diario'
+    const tipoReporte = req.query.tipo || 'detalle_puesto'; // 'detalle_puesto', 'resumen_area', 'diario', 'comparativa'
     const fechaInicio = req.query.fechaInicio || fechaInicioDefault;
     const fechaFin = req.query.fechaFin || hoyStr;
     const fechaDiario = req.query.fechaDiario || hoyStr;
@@ -22,7 +22,7 @@ async function showReportes(req, res) {
 
     try {
         // Garantizar que fechas pasadas tengan autocompletados sus ceros
-        if (tipoReporte === 'diario' && fechaDiario < hoyStr) {
+        if ((tipoReporte === 'diario' || tipoReporte === 'comparativa') && fechaDiario < hoyStr) {
             await autocompletarAsistenciasPasadas(fechaDiario, areaId);
         } else {
             autocompletarAsistenciasPasadas().catch(e => console.error('Report background autocomplete error:', e.message));
@@ -33,7 +33,8 @@ async function showReportes(req, res) {
         const areaIds = reportableAreas.map(a => a.id_area);
 
         let data = [];
-        let totales = { personas: 0, promedioDiario: 0, totalPuestos: 0, totalContratados: 0, faltantes: 0, porcentajeCobertura: 100 };
+        let resumenAreas = [];
+        let totales = { personas: 0, promedioDiario: 0, totalPuestos: 0, totalContratados: 0, faltantes: 0, porcentajeCobertura: 100, diferenciaNeta: 0, excedentes: 0, puestosCompletos: 0, puestosDeficit: 0, puestosExcedente: 0, puestosSinAsistencia: 0 };
         let chartData = { labels: [], datasets: [] };
         let chartDataPuestos = { labels: [], datasets: [] };
         let ubicacionesFiltro = [];
@@ -69,7 +70,176 @@ async function showReportes(req, res) {
 
             const areaListStr = filterAreas.join(',');
 
-            if (tipoReporte === 'diario') {
+            if (tipoReporte === 'comparativa') {
+                // Reporte comparativo de Plantilla Contratada vs Asistencia Real
+                let queryComp = `
+                    SELECT 
+                        ar.id_area,
+                        ar.codigo AS area_codigo,
+                        ar.nombre AS area_nombre,
+                        p.id_puesto,
+                        p.nombre AS puesto_nombre,
+                        ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
+                        ISNULL(p.aplica_turnos, 0) AS aplica_turnos,
+                        ISNULL(SUM(ad.cantidad_asistentes), 0) AS cantidad_asistentes,
+                        COUNT(ad.id_asistencia) AS registros_turnos
+                    FROM Puestos p
+                    INNER JOIN Areas ar ON p.id_area = ar.id_area
+                    LEFT JOIN Asistencias_Diarias ad ON p.id_puesto = ad.id_puesto AND ad.fecha = @fecha
+                    WHERE ar.id_area IN (${areaListStr}) AND p.activo = 1
+                `;
+
+                const reqComp = pool.request().input('fecha', sql.Date, fechaDiario);
+
+                if (areaId) {
+                    queryComp += ` AND ar.id_area = @areaIdComp`;
+                    reqComp.input('areaIdComp', sql.Int, areaId);
+                }
+
+                if (puestoId) {
+                    queryComp += ` AND p.id_puesto = @puestoIdComp`;
+                    reqComp.input('puestoIdComp', sql.Int, puestoId);
+                }
+
+                queryComp += `
+                    GROUP BY ar.id_area, ar.codigo, ar.nombre, p.id_puesto, p.nombre, p.cantidad_contratada, p.aplica_turnos
+                    ORDER BY ar.nombre ASC, p.nombre ASC
+                `;
+
+                const resultComp = await reqComp.query(queryComp);
+
+                let totalContratadosSum = 0;
+                let totalAsistentesSum = 0;
+                let totalFaltantesSum = 0;
+                let totalExcedentesSum = 0;
+                let puestosCompletos = 0;
+                let puestosDeficit = 0;
+                let puestosExcedente = 0;
+                let puestosSinAsistencia = 0;
+
+                data = resultComp.recordset.map(item => {
+                    const contratada = item.cantidad_contratada || 0;
+                    const asistentes = item.cantidad_asistentes || 0;
+                    const diferencia = asistentes - contratada;
+                    const faltantes = contratada > 0 ? Math.max(0, contratada - asistentes) : 0;
+                    const excedentes = contratada > 0 ? Math.max(0, asistentes - contratada) : asistentes;
+                    const porcentaje = contratada > 0 ? Math.round((asistentes / contratada) * 100) : (asistentes > 0 ? 100 : 0);
+
+                    let estado = 'COMPLETO';
+                    let estadoLabel = 'Completo';
+                    let estadoBadge = 'bg-success-subtle text-success border border-success-subtle';
+
+                    if (asistentes === 0 && contratada > 0) {
+                        estado = 'SIN_ASISTENCIA';
+                        estadoLabel = 'Sin Asistencia';
+                        estadoBadge = 'bg-secondary-subtle text-secondary border border-secondary-subtle';
+                        puestosSinAsistencia++;
+                        puestosDeficit++;
+                    } else if (diferencia < 0) {
+                        if (porcentaje < 80) {
+                            estado = 'DEFICIT_CRITICO';
+                            estadoLabel = 'Déficit Crítico';
+                            estadoBadge = 'bg-danger-subtle text-danger border border-danger-subtle';
+                        } else {
+                            estado = 'DEFICIT_LEVE';
+                            estadoLabel = 'Faltante';
+                            estadoBadge = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+                        }
+                        puestosDeficit++;
+                    } else if (diferencia > 0) {
+                        estado = 'EXCEDENTE';
+                        estadoLabel = 'Excedente';
+                        estadoBadge = 'bg-primary-subtle text-primary border border-primary-subtle';
+                        puestosExcedente++;
+                    } else {
+                        puestosCompletos++;
+                    }
+
+                    totalContratadosSum += contratada;
+                    totalAsistentesSum += asistentes;
+                    totalFaltantesSum += faltantes;
+                    totalExcedentesSum += (diferencia > 0 ? diferencia : 0);
+
+                    return {
+                        ...item,
+                        contratada,
+                        asistentes,
+                        diferencia,
+                        faltantes,
+                        excedentes,
+                        porcentaje,
+                        estado,
+                        estadoLabel,
+                        estadoBadge
+                    };
+                });
+
+                totales.personas = totalAsistentesSum;
+                totales.totalContratados = totalContratadosSum;
+                totales.faltantes = totalFaltantesSum;
+                totales.excedentes = totalExcedentesSum;
+                totales.diferenciaNeta = totalAsistentesSum - totalContratadosSum;
+                totales.totalPuestos = data.length;
+                totales.porcentajeCobertura = totalContratadosSum > 0 
+                    ? Math.round((totalAsistentesSum / totalContratadosSum) * 100) 
+                    : (totalAsistentesSum > 0 ? 100 : 0);
+                totales.puestosCompletos = puestosCompletos;
+                totales.puestosDeficit = puestosDeficit;
+                totales.puestosExcedente = puestosExcedente;
+                totales.puestosSinAsistencia = puestosSinAsistencia;
+
+                // Agrupado por área para gráfico y resumen ejecutivo
+                const areaMap = new Map();
+                data.forEach(item => {
+                    if (!areaMap.has(item.id_area)) {
+                        areaMap.set(item.id_area, {
+                            id_area: item.id_area,
+                            area_nombre: item.area_nombre,
+                            area_codigo: item.area_codigo,
+                            contratada: 0,
+                            asistentes: 0,
+                            puestosCount: 0
+                        });
+                    }
+                    const a = areaMap.get(item.id_area);
+                    a.contratada += item.contratada;
+                    a.asistentes += item.asistentes;
+                    a.puestosCount++;
+                });
+
+                resumenAreas = Array.from(areaMap.values()).map(a => {
+                    const dif = a.asistentes - a.contratada;
+                    const pct = a.contratada > 0 ? Math.round((a.asistentes / a.contratada) * 100) : (a.asistentes > 0 ? 100 : 0);
+                    return {
+                        ...a,
+                        diferencia: dif,
+                        porcentaje: pct
+                    };
+                });
+
+                chartData = {
+                    labels: resumenAreas.map(a => a.area_nombre),
+                    datasets: [
+                        {
+                            label: 'Plantilla Contratada',
+                            data: resumenAreas.map(a => a.contratada),
+                            backgroundColor: '#7373C0',
+                            borderColor: '#54549E',
+                            borderWidth: 1.5,
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Personal Asistió',
+                            data: resumenAreas.map(a => a.asistentes),
+                            backgroundColor: '#6DBA00',
+                            borderColor: '#528C00',
+                            borderWidth: 1.5,
+                            borderRadius: 4
+                        }
+                    ]
+                };
+
+            } else if (tipoReporte === 'diario') {
                 // Reporte específico de un día por puestos, áreas y ubicaciones
                 let queryDiario = `
                     SELECT 
@@ -402,6 +572,7 @@ async function showReportes(req, res) {
                 ubicacionesFiltro,
                 puestosFiltro,
                 data,
+                resumenAreas,
                 totales,
                 chartData,
                 chartDataPuestos
@@ -472,7 +643,133 @@ async function exportExcel(req, res) {
         worksheet.getCell('E2').value = `Fecha de emisión: ${new Date().toLocaleString()}`;
         worksheet.getCell('E2').font = { italic: true, size: 9 };
 
-        if (tipo === 'diario') {
+        if (tipo === 'comparativa') {
+            worksheet.getCell('A3').value = `Filtro: Comparativa Plantilla vs Asistencia | Fecha: ${fechaDiario}`;
+            worksheet.getCell('A3').font = { bold: true, size: 10 };
+
+            const headers = [
+                'Área Operativa',
+                'Cargo / Puesto de Trabajo',
+                'Modalidad Turnos',
+                'Plantilla Contratada',
+                'Asistencia Real',
+                'Diferencia (Variación)',
+                '% Cumplimiento',
+                'Estado'
+            ];
+            const headerRow = worksheet.getRow(5);
+            headerRow.values = headers;
+            headerRow.eachCell(cell => {
+                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF860063' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            });
+            headerRow.height = 24;
+
+            let query = `
+                SELECT 
+                    ar.nombre AS area_nombre,
+                    p.nombre AS puesto_nombre,
+                    ISNULL(p.cantidad_contratada, 0) AS cantidad_contratada,
+                    ISNULL(p.aplica_turnos, 0) AS aplica_turnos,
+                    ISNULL(SUM(ad.cantidad_asistentes), 0) AS cantidad_asistentes
+                FROM Puestos p
+                INNER JOIN Areas ar ON p.id_area = ar.id_area
+                LEFT JOIN Asistencias_Diarias ad ON p.id_puesto = ad.id_puesto AND ad.fecha = @fecha
+                WHERE ar.id_area IN (${areaListStr}) AND p.activo = 1
+            `;
+
+            const reqExcel = pool.request().input('fecha', sql.Date, fechaDiario);
+
+            if (areaId) {
+                query += ` AND ar.id_area = @areaId`;
+                reqExcel.input('areaId', sql.Int, areaId);
+            }
+
+            if (puestoId) {
+                query += ` AND p.id_puesto = @puestoId`;
+                reqExcel.input('puestoId', sql.Int, puestoId);
+            }
+
+            query += `
+                GROUP BY ar.nombre, p.nombre, p.cantidad_contratada, p.aplica_turnos
+                ORDER BY ar.nombre ASC, p.nombre ASC
+            `;
+
+            const resData = await reqExcel.query(query);
+
+            let currentRow = 6;
+            let totalContratadosExcel = 0;
+            let totalAsistentesExcel = 0;
+            let totalDiferenciaExcel = 0;
+
+            resData.recordset.forEach(r => {
+                const contratada = r.cantidad_contratada || 0;
+                const asistentes = r.cantidad_asistentes || 0;
+                const dif = asistentes - contratada;
+                const pct = contratada > 0 ? Math.round((asistentes / contratada) * 100) : (asistentes > 0 ? 100 : 0);
+                
+                let estadoStr = 'Completo';
+                if (asistentes === 0 && contratada > 0) estadoStr = 'Sin Asistencia';
+                else if (dif < 0) estadoStr = pct < 80 ? 'Déficit Crítico' : 'Faltante';
+                else if (dif > 0) estadoStr = 'Excedente';
+
+                const row = worksheet.getRow(currentRow);
+                row.values = [
+                    r.area_nombre,
+                    r.puesto_nombre,
+                    r.aplica_turnos ? '2 Turnos' : 'Turno Único',
+                    contratada,
+                    asistentes,
+                    dif > 0 ? `+${dif}` : dif,
+                    `${pct}%`,
+                    estadoStr
+                ];
+
+                row.getCell(3).alignment = { horizontal: 'center' };
+                row.getCell(4).alignment = { horizontal: 'center' };
+                row.getCell(5).alignment = { horizontal: 'center' };
+                row.getCell(6).alignment = { horizontal: 'center' };
+                row.getCell(7).alignment = { horizontal: 'center' };
+                row.getCell(8).alignment = { horizontal: 'center' };
+
+                if (dif < 0) {
+                    row.getCell(6).font = { color: { argb: 'FFD83548' }, bold: true };
+                } else if (dif > 0) {
+                    row.getCell(6).font = { color: { argb: 'FF1565C0' }, bold: true };
+                } else {
+                    row.getCell(6).font = { color: { argb: 'FF2E7D32' }, bold: true };
+                }
+
+                totalContratadosExcel += contratada;
+                totalAsistentesExcel += asistentes;
+                totalDiferenciaExcel += dif;
+                currentRow++;
+            });
+
+            // Fila Total
+            const totalRow = worksheet.getRow(currentRow);
+            totalRow.getCell(3).value = 'TOTALES:';
+            totalRow.getCell(3).font = { bold: true };
+            totalRow.getCell(3).alignment = { horizontal: 'right' };
+            totalRow.getCell(4).value = totalContratadosExcel;
+            totalRow.getCell(4).font = { bold: true };
+            totalRow.getCell(4).alignment = { horizontal: 'center' };
+            totalRow.getCell(5).value = totalAsistentesExcel;
+            totalRow.getCell(5).font = { bold: true };
+            totalRow.getCell(5).alignment = { horizontal: 'center' };
+            totalRow.getCell(6).value = totalDiferenciaExcel > 0 ? `+${totalDiferenciaExcel}` : totalDiferenciaExcel;
+            totalRow.getCell(6).font = { bold: true };
+            totalRow.getCell(6).alignment = { horizontal: 'center' };
+            const globalCob = totalContratadosExcel > 0 ? `${Math.round((totalAsistentesExcel / totalContratadosExcel) * 100)}%` : '100%';
+            totalRow.getCell(7).value = globalCob;
+            totalRow.getCell(7).font = { bold: true };
+            totalRow.getCell(7).alignment = { horizontal: 'center' };
+            totalRow.getCell(8).value = totalDiferenciaExcel < 0 ? 'Con Faltantes' : (totalDiferenciaExcel > 0 ? 'Con Excedente' : 'Plantilla Completa');
+            totalRow.getCell(8).font = { bold: true };
+            totalRow.getCell(8).alignment = { horizontal: 'center' };
+
+        } else if (tipo === 'diario') {
             worksheet.getCell('A3').value = `Filtro: Reporte Diario | Fecha: ${fechaDiario}`;
             worksheet.getCell('A3').font = { bold: true, size: 10 };
 

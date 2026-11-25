@@ -55,7 +55,10 @@
                     <div class="card shadow-sm border-0 mb-4 no-print">
                         <div class="card-header bg-white py-3 border-bottom">
                             <div class="nav nav-pills card-header-pills" id="reportTabs">
-                                <button type="button" class="nav-link active" data-tipo="detalle_puesto">
+                                <button type="button" class="nav-link active" data-tipo="comparativa">
+                                    <i class="bi bi-bar-chart-steps me-1"></i> Comparativa Plantilla vs Asistencia
+                                </button>
+                                <button type="button" class="nav-link" data-tipo="detalle_puesto">
                                     <i class="bi bi-people-fill me-1"></i> Asistencia por Puestos & Tendencias
                                 </button>
                                 <button type="button" class="nav-link" data-tipo="resumen_area">
@@ -238,7 +241,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             initAppLayout('reportes');
 
-            let currentTipo = 'detalle_puesto';
+            let currentTipo = 'comparativa';
             let chartInstance = null;
 
             function getNicaDate(d = new Date()) {
@@ -267,6 +270,12 @@
             fechaFinInput.value = hoyStr;
             fechaDiarioInput.value = hoyStr;
 
+            // Ajustar vista inicial para comparativa
+            divFechaInicio.classList.add('d-none');
+            divFechaFin.classList.add('d-none');
+            divFechaDiario.classList.remove('d-none');
+            divPuestoWrapper.classList.remove('d-none');
+
             // Cambio de Pestañas
             const tabs = document.querySelectorAll('#reportTabs button');
             tabs.forEach(tab => {
@@ -275,7 +284,12 @@
                     tab.classList.add('active');
                     currentTipo = tab.getAttribute('data-tipo');
 
-                    if (currentTipo === 'diario') {
+                    if (currentTipo === 'comparativa') {
+                        divFechaInicio.classList.add('d-none');
+                        divFechaFin.classList.add('d-none');
+                        divFechaDiario.classList.remove('d-none');
+                        divPuestoWrapper.classList.remove('d-none');
+                    } else if (currentTipo === 'diario') {
                         divFechaInicio.classList.add('d-none');
                         divFechaFin.classList.add('d-none');
                         divFechaDiario.classList.remove('d-none');
@@ -362,9 +376,15 @@
                     }
 
                     // Actualizar Tarjetas KPI
+                    const isComp = currentTipo === 'comparativa';
                     document.getElementById('statReporteTotal').textContent = `${data.totales ? data.totales.personas : 0} pers.`;
                     document.getElementById('statReporteContratada').textContent = `${data.totales ? data.totales.totalContratados : 0} pers.`;
-                    document.getElementById('statReporteFaltantes').textContent = `${data.totales ? data.totales.faltantes : 0} pers.`;
+                    if (isComp) {
+                        const difNeta = data.totales ? data.totales.diferenciaNeta : 0;
+                        document.getElementById('statReporteFaltantes').textContent = difNeta > 0 ? `+${difNeta} pers.` : `${difNeta} pers.`;
+                    } else {
+                        document.getElementById('statReporteFaltantes').textContent = `${data.totales ? data.totales.faltantes : 0} pers.`;
+                    }
                     document.getElementById('statReporteCobertura').textContent = `${data.totales ? data.totales.porcentajeCobertura : 100}%`;
 
                     // Renderizar Gráfica Chart.js
@@ -402,7 +422,7 @@
 
                 cardGrafica.classList.remove('d-none');
                 chartInstance = new Chart(canvas, {
-                    type: currentTipo === 'diario' ? 'bar' : 'line',
+                    type: (currentTipo === 'diario' || currentTipo === 'comparativa') ? 'bar' : 'line',
                     data: chartConfigData,
                     options: {
                         responsive: true,
@@ -429,7 +449,75 @@
                     return;
                 }
 
-                if (currentTipo === 'resumen_area') {
+                if (currentTipo === 'comparativa') {
+                    container.innerHTML = `
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Área Operativa</th>
+                                    <th>Cargo / Puesto</th>
+                                    <th class="text-center">Plantilla Contratada</th>
+                                    <th class="text-center">Personal que Asistió</th>
+                                    <th class="text-center">Diferencia (Variación)</th>
+                                    <th class="text-center" style="min-width: 160px;">% Cobertura</th>
+                                    <th class="pe-4 text-center">Estado Semáforo</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(item => {
+                                    const dif = item.diferencia;
+                                    const pct = item.porcentaje;
+                                    const difBadge = dif < 0 
+                                        ? `<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fw-bold fs-6"><i class="bi bi-arrow-down-right me-1"></i>${dif}</span>`
+                                        : (dif === 0 
+                                            ? `<span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-bold fs-6"><i class="bi bi-check-lg me-1"></i>0 (Exacto)</span>`
+                                            : `<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fw-bold fs-6"><i class="bi bi-arrow-up-right me-1"></i>+${dif}</span>`);
+                                    const progressBarColor = pct >= 100 ? 'bg-success' : (pct >= 80 ? 'bg-warning' : 'bg-danger');
+                                    const textPctColor = pct >= 100 ? 'text-success' : (pct >= 80 ? 'text-warning-emphasis' : 'text-danger');
+                                    return `
+                                        <tr>
+                                            <td class="ps-4"><span class="badge bg-light text-dark border">${item.area_nombre}</span></td>
+                                            <td>
+                                                <div class="fw-bold text-dark fs-6">${item.puesto_nombre}</div>
+                                                ${item.aplica_turnos ? '<span class="badge bg-warning-subtle text-dark border border-warning-subtle small mt-1" style="font-size: 0.7rem;"><i class="bi bi-clock-history me-1 text-warning"></i>2 Turnos</span>' : '<span class="badge bg-light text-muted border small mt-1" style="font-size: 0.7rem;">Turno Único</span>'}
+                                            </td>
+                                            <td class="text-center"><span class="badge bg-light text-teal border fw-bold fs-6 px-3 py-2">${item.contratada} pers.</span></td>
+                                            <td class="text-center"><span class="badge ${item.asistentes > 0 ? 'bg-success' : 'bg-secondary'} px-3 py-2 fs-6 fw-bold">${item.asistentes} pers.</span></td>
+                                            <td class="text-center">${difBadge}</td>
+                                            <td class="text-center">
+                                                <div class="d-flex align-items-center justify-content-center gap-2">
+                                                    <div class="progress flex-grow-1" style="max-width: 90px; height: 8px;">
+                                                        <div class="progress-bar ${progressBarColor}" role="progressbar" style="width: ${Math.min(100, pct)}%;"></div>
+                                                    </div>
+                                                    <span class="small fw-bold ${textPctColor}">${pct}%</span>
+                                                </div>
+                                            </td>
+                                            <td class="pe-4 text-center">
+                                                <span class="badge ${item.estadoBadge || 'bg-light text-dark border'} px-3 py-2 fw-bold fs-6">${item.estadoLabel || item.estado}</span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                            <tfoot class="table-light border-top border-2">
+                                <tr class="fw-bold">
+                                    <td colspan="2" class="ps-4 text-uppercase">Gran Total Comparativo:</td>
+                                    <td class="text-center text-teal fs-6">${data.totales ? data.totales.totalContratados : 0} pers.</td>
+                                    <td class="text-center text-success fs-6">${data.totales ? data.totales.personas : 0} pers.</td>
+                                    <td class="text-center fs-6 ${(data.totales && data.totales.diferenciaNeta < 0) ? 'text-danger' : ((data.totales && data.totales.diferenciaNeta > 0) ? 'text-primary' : 'text-success')}">
+                                        ${data.totales ? (data.totales.diferenciaNeta > 0 ? '+' + data.totales.diferenciaNeta : data.totales.diferenciaNeta) : 0}
+                                    </td>
+                                    <td class="text-center fs-6 text-success">${data.totales ? data.totales.porcentajeCobertura : 100}%</td>
+                                    <td class="pe-4 text-center">
+                                        <span class="badge ${(data.totales && data.totales.porcentajeCobertura >= 100) ? 'bg-success text-white' : ((data.totales && data.totales.porcentajeCobertura >= 80) ? 'bg-warning text-dark' : 'bg-danger text-white')} px-3 py-2 fs-6">
+                                            ${(data.totales && data.totales.porcentajeCobertura >= 100) ? 'Plantilla Completa' : ((data.totales && data.totales.porcentajeCobertura >= 80) ? 'Déficit Moderado' : 'Déficit Crítico')}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    `;
+                } else if (currentTipo === 'resumen_area') {
                     container.innerHTML = `
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">

@@ -2,10 +2,10 @@
   "name": "asistenciarh",
   "version": "1.0.0",
   "description": "Sistema Web y API de Control de Asistencia por Áreas y Puestos con SQL Server",
-  "main": "app.js",
+  "main": "backend/app.js",
   "scripts": {
-    "start": "node app.js",
-    "dev": "node --watch app.js",
+    "start": "node backend/app.js",
+    "dev": "node --watch backend/app.js",
     "seed": "node database/importExcelData.js",
     "import-excel": "node database/importExcelData.js"
   },

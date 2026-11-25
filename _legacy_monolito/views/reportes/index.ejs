@@ -24,6 +24,9 @@
 <div class="card shadow-sm border-0 mb-4 no-print">
     <div class="card-header bg-white py-3 border-bottom">
         <div class="nav nav-pills card-header-pills" id="reportTabs" role="tablist">
+            <a class="nav-link <%= tipoReporte === 'comparativa' ? 'active' : '' %>" href="/reportes?tipo=comparativa">
+                <i class="bi bi-bar-chart-steps me-1"></i> Comparativa Plantilla vs Asistencia
+            </a>
             <a class="nav-link <%= tipoReporte === 'detalle_puesto' ? 'active' : '' %>" href="/reportes?tipo=detalle_puesto">
                 <i class="bi bi-people-fill me-1"></i> Asistencia por Puestos & Tendencias
             </a>
@@ -40,10 +43,10 @@
         <form action="/reportes" method="GET" class="row g-3 align-items-end" id="formReportes">
             <input type="hidden" name="tipo" value="<%= tipoReporte %>">
 
-            <% if (tipoReporte === 'diario') { %>
+            <% if (tipoReporte === 'diario' || tipoReporte === 'comparativa') { %>
                 <div class="col-md-2">
                     <label for="fechaDiario" class="form-label fw-semibold text-secondary small">
-                        <i class="bi bi-calendar-event me-1"></i> Fecha Específica:
+                        <i class="bi bi-calendar-event me-1"></i> <%= tipoReporte === 'comparativa' ? 'Fecha Evaluación:' : 'Fecha Específica:' %>
                     </label>
                     <input type="date" class="form-control" id="fechaDiario" name="fechaDiario" value="<%= fechaDiario %>" required>
                 </div>
@@ -79,6 +82,7 @@
                 </select>
             </div>
 
+            <% if (tipoReporte !== 'comparativa') { %>
             <!-- Selector de Ubicación -->
             <div class="col-md-2">
                 <label for="ubicacionId" class="form-label fw-semibold text-secondary small">
@@ -95,9 +99,10 @@
                     <% } %>
                 </select>
             </div>
+            <% } %>
 
             <!-- Selector de Puesto de Trabajo -->
-            <div class="col-md-2">
+            <div class="<%= tipoReporte === 'comparativa' ? 'col-md-4' : 'col-md-2' %>">
                 <label for="puestoId" class="form-label fw-semibold text-secondary small">
                     <i class="bi bi-person-workspace me-1 text-primary"></i> Puesto:
                 </label>
@@ -114,9 +119,10 @@
             </div>
 
             <!-- Botón Generar -->
-            <div class="col-md-1">
-                <button type="submit" class="btn btn-primary w-100 fw-semibold px-2" title="Aplicar filtros">
+            <div class="<%= tipoReporte === 'comparativa' ? 'col-md-3' : 'col-md-1' %>">
+                <button type="submit" class="btn btn-primary w-100 fw-semibold px-2 d-flex align-items-center justify-content-center gap-2" title="Aplicar filtros">
                     <i class="bi bi-funnel-fill"></i>
+                    <span><%= tipoReporte === 'comparativa' ? 'Generar Comparativa' : 'Filtrar' %></span>
                 </button>
             </div>
         </form>
@@ -156,15 +162,21 @@
     </div>
 
     <div class="col-sm-6 col-lg-3">
-        <div class="card shadow-sm border-0 stat-card stat-danger">
+        <div class="card shadow-sm border-0 stat-card <%= tipoReporte === 'comparativa' ? (totales.diferenciaNeta < 0 ? 'stat-danger' : (totales.diferenciaNeta > 0 ? 'stat-teal' : 'stat-success')) : 'stat-danger' %>">
             <div class="card-body p-3 d-flex align-items-center justify-content-between">
                 <div>
-                    <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">Faltantes / Ausencias</span>
-                    <h3 class="fw-bold my-1 text-danger"><%= totales.faltantes %></h3>
-                    <small class="text-muted">Diferencia respecto a dotación</small>
+                    <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.72rem;">
+                        <%= tipoReporte === 'comparativa' ? 'Diferencia (Variación)' : 'Faltantes / Ausencias' %>
+                    </span>
+                    <h3 class="fw-bold my-1 <%= tipoReporte === 'comparativa' ? (totales.diferenciaNeta < 0 ? 'text-danger' : (totales.diferenciaNeta > 0 ? 'text-primary' : 'text-success')) : 'text-danger' %>">
+                        <%= tipoReporte === 'comparativa' ? (totales.diferenciaNeta > 0 ? '+' + totales.diferenciaNeta : totales.diferenciaNeta) : totales.faltantes %>
+                    </h3>
+                    <small class="text-muted">
+                        <%= tipoReporte === 'comparativa' ? (totales.diferenciaNeta < 0 ? 'Personas faltantes' : (totales.diferenciaNeta > 0 ? 'Sobre-dotación neta' : 'Dotación exacta')) : 'Diferencia respecto a dotación' %>
+                    </small>
                 </div>
-                <div class="stat-icon bg-danger-subtle text-danger">
-                    <i class="bi bi-person-dash-fill"></i>
+                <div class="stat-icon <%= tipoReporte === 'comparativa' ? (totales.diferenciaNeta < 0 ? 'bg-danger-subtle text-danger' : (totales.diferenciaNeta > 0 ? 'bg-primary-subtle text-primary' : 'bg-success-subtle text-success')) : 'bg-danger-subtle text-danger' %>">
+                    <i class="bi <%= tipoReporte === 'comparativa' ? (totales.diferenciaNeta < 0 ? 'bi-arrow-down-right-circle-fill' : (totales.diferenciaNeta > 0 ? 'bi-arrow-up-right-circle-fill' : 'bi-check-circle-fill')) : 'bi-person-dash-fill' %>"></i>
                 </div>
             </div>
         </div>
@@ -187,9 +199,206 @@
 </div>
 
 <!-- ========================================================================= -->
+<!-- PESTAÑA: COMPARATIVA PLANTILLA VS ASISTENCIA REAL                         -->
+<!-- ========================================================================= -->
+<% if (tipoReporte === 'comparativa') { %>
+
+    <!-- Mini-Panel de Diagnóstico Rápido de Cargos -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="p-3 border rounded-3 bg-white shadow-sm d-flex align-items-center gap-3">
+                <span class="badge bg-success-subtle text-success fs-4 p-2 rounded-circle"><i class="bi bi-check2-circle"></i></span>
+                <div>
+                    <h5 class="fw-bold mb-0 text-success"><%= totales.puestosCompletos || 0 %></h5>
+                    <small class="text-muted fw-semibold">Cargos Completos (100%)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-3 border rounded-3 bg-white shadow-sm d-flex align-items-center gap-3">
+                <span class="badge bg-danger-subtle text-danger fs-4 p-2 rounded-circle"><i class="bi bi-exclamation-triangle"></i></span>
+                <div>
+                    <h5 class="fw-bold mb-0 text-danger"><%= totales.puestosDeficit || 0 %></h5>
+                    <small class="text-muted fw-semibold">Con Faltantes / Déficit</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-3 border rounded-3 bg-white shadow-sm d-flex align-items-center gap-3">
+                <span class="badge bg-primary-subtle text-primary fs-4 p-2 rounded-circle"><i class="bi bi-arrow-up-circle"></i></span>
+                <div>
+                    <h5 class="fw-bold mb-0 text-primary"><%= totales.puestosExcedente || 0 %></h5>
+                    <small class="text-muted fw-semibold">Con Excedente (>100%)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="p-3 border rounded-3 bg-white shadow-sm d-flex align-items-center gap-3">
+                <span class="badge bg-secondary-subtle text-secondary fs-4 p-2 rounded-circle"><i class="bi bi-person-x"></i></span>
+                <div>
+                    <h5 class="fw-bold mb-0 text-secondary"><%= totales.puestosSinAsistencia || 0 %></h5>
+                    <small class="text-muted fw-semibold">Sin Asistencia (0 pers.)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico Comparativo de Barras: Plantilla vs Asistencia -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-bar-chart-line-fill text-primary me-2"></i> Comparativa por Área: Plantilla Contratada vs Asistencia Real
+                </h5>
+                <small class="text-muted">Evaluación simultánea de personal esperado vs personal asistente por área en la fecha <%= fechaDiario %></small>
+            </div>
+            <span class="badge bg-light text-dark border px-3 py-2">
+                <i class="bi bi-calendar-check me-1 text-primary"></i> <%= fechaDiario %>
+            </span>
+        </div>
+        <div class="card-body p-3">
+            <% if (chartData && chartData.labels && chartData.labels.length > 0) { %>
+                <div style="position: relative; height: 320px;">
+                    <canvas id="chartComparativaCanvas"></canvas>
+                </div>
+            <% } else { %>
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                    No hay datos suficientes para graficar la comparativa de esta fecha.
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Tabla Comparativa Detallada -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-table text-primary me-2"></i> Detalle Comparativo por Cargo y Puesto
+                </h5>
+                <small class="text-muted">Comparación puesto a puesto entre la plantilla autorizada y la presencia real en campo</small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-teal-subtle text-teal border border-teal-subtle px-3 py-1 fw-bold">Plantilla: <%= totales.totalContratados %></span>
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 fw-bold">Asistieron: <%= totales.personas %></span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Área Operativa</th>
+                            <th>Cargo / Puesto</th>
+                            <th class="text-center">Plantilla Contratada</th>
+                            <th class="text-center">Personal que Asistió</th>
+                            <th class="text-center">Diferencia (Variación)</th>
+                            <th class="text-center" style="min-width: 170px;">% Cobertura</th>
+                            <th class="pe-4 text-center">Estado Semáforo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% if (data && data.length > 0) { %>
+                            <% data.forEach(function(row) { %>
+                                <tr>
+                                    <td class="ps-4">
+                                        <span class="badge bg-light text-dark border"><%= row.area_nombre %></span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold text-dark fs-6"><%= row.puesto_nombre %></div>
+                                        <% if (row.aplica_turnos) { %>
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle small mt-1" style="font-size: 0.7rem;">
+                                                <i class="bi bi-clock-history me-1 text-warning"></i>2 Turnos (Día/Noche)
+                                            </span>
+                                        <% } else { %>
+                                            <span class="badge bg-light text-muted border small mt-1" style="font-size: 0.7rem;">Turno Único</span>
+                                        <% } %>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-teal border fw-bold fs-6 px-3 py-2">
+                                            <%= row.contratada %> pers.
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge <%= row.asistentes > 0 ? 'bg-success' : 'bg-secondary' %> px-3 py-2 fs-6 fw-bold">
+                                            <%= row.asistentes %> pers.
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <% if (row.diferencia < 0) { %>
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fw-bold fs-6">
+                                                <i class="bi bi-arrow-down-right me-1"></i><%= row.diferencia %>
+                                            </span>
+                                        <% } else if (row.diferencia === 0) { %>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-bold fs-6">
+                                                <i class="bi bi-check-lg me-1"></i>0 (Exacto)
+                                            </span>
+                                        <% } else { %>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fw-bold fs-6">
+                                                <i class="bi bi-arrow-up-right me-1"></i>+<%= row.diferencia %>
+                                            </span>
+                                        <% } %>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center gap-2">
+                                            <div class="progress flex-grow-1" style="max-width: 90px; height: 8px;">
+                                                <div class="progress-bar <%= row.porcentaje >= 100 ? 'bg-success' : (row.porcentaje >= 80 ? 'bg-warning' : 'bg-danger') %>" 
+                                                     role="progressbar" 
+                                                     style="width: <%= Math.min(100, row.porcentaje) %>%;" 
+                                                     aria-valuenow="<%= row.porcentaje %>" 
+                                                     aria-valuemin="0" 
+                                                     aria-valuemax="100">
+                                                </div>
+                                            </div>
+                                            <span class="small fw-bold <%= row.porcentaje >= 100 ? 'text-success' : (row.porcentaje >= 80 ? 'text-warning-emphasis' : 'text-danger') %>">
+                                                <%= row.porcentaje %>%
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="pe-4 text-center">
+                                        <span class="badge <%= row.estadoBadge %> px-3 py-2 fw-bold fs-6">
+                                            <%= row.estadoLabel %>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="7" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                                    No se encontraron puestos o datos para la fecha <%= fechaDiario %>.
+                                </td>
+                            </tr>
+                        <% } %>
+                    </tbody>
+                    <% if (data && data.length > 0) { %>
+                        <tfoot class="table-light border-top border-2">
+                            <tr class="fw-bold">
+                                <td colspan="2" class="ps-4 text-uppercase">Gran Total Comparativo:</td>
+                                <td class="text-center text-teal fs-6"><%= totales.totalContratados %> pers.</td>
+                                <td class="text-center text-success fs-6"><%= totales.personas %> pers.</td>
+                                <td class="text-center fs-6 <%= totales.diferenciaNeta < 0 ? 'text-danger' : (totales.diferenciaNeta > 0 ? 'text-primary' : 'text-success') %>">
+                                    <%= totales.diferenciaNeta > 0 ? '+' + totales.diferenciaNeta : totales.diferenciaNeta %>
+                                </td>
+                                <td class="text-center fs-6 text-success"><%= totales.porcentajeCobertura %>%</td>
+                                <td class="pe-4 text-center">
+                                    <span class="badge <%= totales.porcentajeCobertura >= 100 ? 'bg-success text-white' : (totales.porcentajeCobertura >= 80 ? 'bg-warning text-dark' : 'bg-danger text-white') %> px-3 py-2 fs-6">
+                                        <%= totales.porcentajeCobertura >= 100 ? 'Plantilla Completa' : (totales.porcentajeCobertura >= 80 ? 'Déficit Moderado' : 'Déficit Crítico') %>
+                                    </span>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    <% } %>
+                </table>
+            </div>
+        </div>
+    </div>
+
+<!-- ========================================================================= -->
 <!-- PESTAÑA: DETALLE POR PUESTOS Y GRÁFICO DE COMPORTAMIENTO TEMPORAL         -->
 <!-- ========================================================================= -->
-<% if (tipoReporte === 'detalle_puesto') { %>
+<% } else if (tipoReporte === 'detalle_puesto') { %>
 
     <!-- Gráfico de Comportamiento Temporal por Puesto -->
     <div class="card shadow-sm border-0 mb-4">
@@ -512,6 +721,48 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // 0. Gráfico Comparativo de Barras: Plantilla vs Asistencia
+    <% if (tipoReporte === 'comparativa') { %>
+        const canvasComp = document.getElementById('chartComparativaCanvas');
+        if (canvasComp) {
+            const chartDataComp = <%- JSON.stringify(chartData) %>;
+            if (chartDataComp && chartDataComp.labels && chartDataComp.labels.length > 0) {
+                new Chart(canvasComp, {
+                    type: 'bar',
+                    data: chartDataComp,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'Cantidad de Personas' },
+                                ticks: { stepSize: 5 }
+                            },
+                            x: {
+                                title: { display: true, text: 'Área Operativa' }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { boxWidth: 14, font: { size: 12, weight: 'bold' } }
+                            },
+                            tooltip: {
+                                padding: 10,
+                                cornerRadius: 8
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    <% } %>
+
     // 1. Gráfico de Comportamiento Temporal por Puesto
     <% if (tipoReporte === 'detalle_puesto') { %>
         const canvasPuestos = document.getElementById('chartPuestosCanvas');
