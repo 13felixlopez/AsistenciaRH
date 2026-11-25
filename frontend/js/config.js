@@ -1,7 +1,4 @@
-// Configuración de conexión al Backend
-// Nota para Netlify: Reemplaza esta URL por la IP pública o dominio de tu servidor propio con HTTPS
-const API_BASE_URL = localStorage.getItem('API_BASE_URL') || (
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3031/api'
-        : 'http://localhost:3031/api' // <-- Reemplaza por la URL de tu servidor en producción
-);
+// Configuración de conexión al Backend (Netlify Serverless + Turso)
+// Al estar desplegado en Netlify, las peticiones a '/api' son atendidas directamente
+// por la Netlify Function mediante la regla de redirección de netlify.toml.
+const API_BASE_URL = localStorage.getItem('API_BASE_URL') || '/api';

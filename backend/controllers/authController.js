@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { getPool, sql } = require('../config/db');
+const { query, initDatabase } = require('../config/db');
+const { recordFailedLogin, resetLoginAttempts } = require('../middlewares/rateLimiter');
 
 // Iniciar sesión y retornar JWT
 async function login(req, res) {
@@ -15,18 +16,33 @@ async function login(req, res) {
     }
 
     try {
-        const pool = await getPool();
-        const result = await pool.request()
-            .input('identifier', sql.VarChar, loginIdentifier)
-            .query(`
+        let result;
+        try {
+            result = await query(`
                 SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.password_hash, u.cargo, u.activo,
                        r.id_rol, r.codigo AS rol_codigo, r.nombre AS rol_nombre
                 FROM Usuarios u
                 INNER JOIN Roles r ON u.id_rol = r.id_rol
-                WHERE LOWER(u.email) = @identifier OR LOWER(u.usuario) = @identifier
-            `);
+                WHERE LOWER(u.email) = ? OR LOWER(u.usuario) = ?
+            `, [loginIdentifier, loginIdentifier]);
+        } catch (dbErr) {
+            if (dbErr.message && (dbErr.message.includes('no such table') || dbErr.message.includes('not found'))) {
+                console.log('🔄 Tablas no encontradas en Turso. Auto-inicializando esquema...');
+                await initDatabase();
+                result = await query(`
+                    SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.password_hash, u.cargo, u.activo,
+                           r.id_rol, r.codigo AS rol_codigo, r.nombre AS rol_nombre
+                    FROM Usuarios u
+                    INNER JOIN Roles r ON u.id_rol = r.id_rol
+                    WHERE LOWER(u.email) = ? OR LOWER(u.usuario) = ?
+                `, [loginIdentifier, loginIdentifier]);
+            } else {
+                throw dbErr;
+            }
+        }
 
         if (result.recordset.length === 0) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 success: false,
                 message: 'Credenciales incorrectas o usuario no encontrado.'
@@ -36,6 +52,7 @@ async function login(req, res) {
         const user = result.recordset[0];
 
         if (!user.activo) {
+            recordFailedLogin(req);
             return res.status(403).json({
                 success: false,
                 message: 'Tu cuenta se encuentra inactiva. Contacta al Administrador.'
@@ -44,16 +61,21 @@ async function login(req, res) {
 
         const match = await bcrypt.compare(password, user.password_hash);
         if (!match) {
+            recordFailedLogin(req);
             return res.status(401).json({
                 success: false,
                 message: 'Credenciales incorrectas.'
             });
         }
 
+        // Login exitoso: restablecer contador de intentos fallidos
+        resetLoginAttempts(req);
+
         // Actualizar último acceso
-        await pool.request()
-            .input('id', sql.Int, user.id_usuario)
-            .query('UPDATE Usuarios SET ultimo_acceso = GETDATE() WHERE id_usuario = @id');
+        await query(
+            "UPDATE Usuarios SET ultimo_acceso = datetime('now', 'localtime') WHERE id_usuario = ?",
+            [user.id_usuario]
+        );
 
         // Generar payload de token JWT
         const userPayload = {
@@ -76,15 +98,15 @@ async function login(req, res) {
         // Obtener áreas asignadas para guiar la redirección inteligente en el frontend
         let defaultAreaId = null;
         if (user.rol_codigo !== 'ADMIN') {
-            const areasUsuario = await pool.request()
-                .input('userId', sql.Int, user.id_usuario)
-                .query(`
-                    SELECT TOP 2 ua.id_area 
-                    FROM Usuario_Areas ua
-                    INNER JOIN Areas a ON ua.id_area = a.id_area
-                    WHERE ua.id_usuario = @userId AND a.activa = 1 AND ua.permite_registro = 1
-                    ORDER BY a.nombre ASC
-                `);
+            const areasUsuario = await query(`
+                SELECT ua.id_area 
+                FROM Usuario_Areas ua
+                INNER JOIN Areas a ON ua.id_area = a.id_area
+                WHERE ua.id_usuario = ? AND a.activa = 1 AND ua.permite_registro = 1
+                ORDER BY a.nombre ASC
+                LIMIT 2
+            `, [user.id_usuario]);
+
             if (areasUsuario.recordset.length === 1) {
                 defaultAreaId = areasUsuario.recordset[0].id_area;
             }
@@ -121,116 +143,100 @@ async function login(req, res) {
 async function getMe(req, res) {
     try {
         const user = req.user;
-        const pool = await getPool();
-        const userRes = await pool.request()
-            .input('id', sql.Int, user.id_usuario)
-            .query(`
-                SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.cargo, u.ultimo_acceso,
-                       r.id_rol, r.codigo AS rol_codigo, r.nombre AS rol_nombre
-                FROM Usuarios u
-                INNER JOIN Roles r ON u.id_rol = r.id_rol
-                WHERE u.id_usuario = @id
-            `);
-
-        if (userRes.recordset.length === 0) {
-            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
-        }
-
-        return res.json({
-            success: true,
-            user: userRes.recordset[0]
-        });
-    } catch (err) {
-        console.error('Error en getMe:', err);
-        return res.status(500).json({ success: false, message: 'Error al obtener usuario actual' });
-    }
-}
-
-// Obtener datos para vista de Perfil
-async function showProfile(req, res) {
-    try {
-        const pool = await getPool();
-        const userId = (req.user || req.session.user).id_usuario;
-
-        const userResult = await pool.request()
-            .input('id', sql.Int, userId)
-            .query(`
-                SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.cargo, u.fecha_creacion, u.ultimo_acceso,
-                       r.nombre AS rol_nombre, r.codigo AS rol_codigo
-                FROM Usuarios u
-                INNER JOIN Roles r ON u.id_rol = r.id_rol
-                WHERE u.id_usuario = @id
-            `);
-
-        const areasResult = await pool.request()
-            .input('userId', sql.Int, userId)
-            .query(`
-                SELECT a.nombre, ua.permite_registro, ua.permite_reportes
-                FROM Usuario_Areas ua
-                INNER JOIN Areas a ON ua.id_area = a.id_area
-                WHERE ua.id_usuario = @userId
-            `);
-
-        return res.json({
-            success: true,
-            user: userResult.recordset[0],
-            areasAsignadas: areasResult.recordset
-        });
-    } catch (err) {
-        console.error('Error en perfil:', err);
-        return res.status(500).json({ success: false, message: 'Error al cargar perfil.' });
-    }
-}
-
-// Cambiar contraseña propia
-async function changePassword(req, res) {
-    const { actualPassword, newPassword, confirmPassword } = req.body;
-    const userId = (req.user || req.session.user).id_usuario;
-
-    if (!actualPassword || !newPassword || !confirmPassword) {
-        return res.status(400).json({ success: false, message: 'Todos los campos son obligatorios.' });
-    }
-
-    if (newPassword !== confirmPassword) {
-        return res.status(400).json({ success: false, message: 'La nueva contraseña y su confirmación no coinciden.' });
-    }
-
-    if (newPassword.length < 6) {
-        return res.status(400).json({ success: false, message: 'La contraseña debe tener al menos 6 caracteres.' });
-    }
-
-    try {
-        const pool = await getPool();
-        const userRes = await pool.request()
-            .input('id', sql.Int, userId)
-            .query('SELECT password_hash FROM Usuarios WHERE id_usuario = @id');
+        const userRes = await query(`
+            SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.cargo, u.ultimo_acceso,
+                   r.id_rol, r.codigo AS rol_codigo, r.nombre AS rol_nombre
+            FROM Usuarios u
+            INNER JOIN Roles r ON u.id_rol = r.id_rol
+            WHERE u.id_usuario = ?
+        `, [user.id_usuario]);
 
         if (userRes.recordset.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
         }
 
-        const currentHash = userRes.recordset[0].password_hash;
-        const valid = await bcrypt.compare(actualPassword, currentHash);
-        if (!valid) {
-            return res.status(400).json({ success: false, message: 'La contraseña actual no es correcta.' });
+        const u = userRes.recordset[0];
+
+        // Obtener áreas
+        const areasRes = await query(`
+            SELECT a.id_area, a.codigo, a.nombre, ua.permite_registro, ua.permite_reportes
+            FROM Usuario_Areas ua
+            INNER JOIN Areas a ON ua.id_area = a.id_area
+            WHERE ua.id_usuario = ? AND a.activa = 1
+            ORDER BY a.nombre ASC
+        `, [user.id_usuario]);
+
+        return res.json({
+            success: true,
+            user: {
+                ...u,
+                areas: areasRes.recordset
+            }
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+}
+
+// Actualizar perfil del usuario autenticado
+async function updateProfile(req, res) {
+    const user = req.user;
+    const { nombre, email, passwordActual, passwordNuevo } = req.body;
+
+    if (!nombre || !email) {
+        return res.status(400).json({ success: false, message: 'Nombre y correo son obligatorios.' });
+    }
+
+    try {
+        // Verificar correo duplicado
+        const check = await query(
+            'SELECT id_usuario FROM Usuarios WHERE email = ? AND id_usuario != ?',
+            [email.trim().toLowerCase(), user.id_usuario]
+        );
+
+        if (check.recordset.length > 0) {
+            return res.status(400).json({ success: false, message: 'El correo electrónico ya está en uso por otro usuario.' });
         }
 
-        const newHash = await bcrypt.hash(newPassword, 10);
-        await pool.request()
-            .input('id', sql.Int, userId)
-            .input('hash', sql.VarChar, newHash)
-            .query('UPDATE Usuarios SET password_hash = @hash WHERE id_usuario = @id');
+        // Si desea cambiar contraseña
+        if (passwordNuevo) {
+            if (!passwordActual) {
+                return res.status(400).json({ success: false, message: 'Debes proporcionar tu contraseña actual para cambiarla.' });
+            }
 
-        return res.json({ success: true, message: 'Contraseña actualizada correctamente.' });
+            const current = await query('SELECT password_hash FROM Usuarios WHERE id_usuario = ?', [user.id_usuario]);
+            const match = await bcrypt.compare(passwordActual, current.recordset[0].password_hash);
+
+            if (!match) {
+                return res.status(400).json({ success: false, message: 'La contraseña actual no es correcta.' });
+            }
+
+            const newHash = await bcrypt.hash(passwordNuevo.trim(), 10);
+            await query(`
+                UPDATE Usuarios 
+                SET nombre = ?, email = ?, password_hash = ?
+                WHERE id_usuario = ?
+            `, [nombre.trim(), email.trim().toLowerCase(), newHash, user.id_usuario]);
+        } else {
+            await query(`
+                UPDATE Usuarios 
+                SET nombre = ?, email = ?
+                WHERE id_usuario = ?
+            `, [nombre.trim(), email.trim().toLowerCase(), user.id_usuario]);
+        }
+
+        return res.json({
+            success: true,
+            message: 'Perfil actualizado correctamente.'
+        });
     } catch (err) {
-        console.error('Error al cambiar contraseña:', err);
-        return res.status(500).json({ success: false, message: 'Error al actualizar contraseña.' });
+        console.error('Error al actualizar perfil:', err);
+        return res.status(500).json({ success: false, message: 'Error al actualizar perfil: ' + err.message });
     }
 }
 
 module.exports = {
     login,
     getMe,
-    showProfile,
-    changePassword
+    updateProfile
 };

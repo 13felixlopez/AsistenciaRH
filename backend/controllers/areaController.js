@@ -1,10 +1,9 @@
-const { getPool, sql } = require('../config/db');
+const { query } = require('../config/db');
 
 // Listar todas las áreas
 async function listAreas(req, res) {
     try {
-        const pool = await getPool();
-        const result = await pool.request().query(`
+        const result = await query(`
             SELECT 
                 a.id_area,
                 a.codigo,
@@ -43,33 +42,26 @@ async function createArea(req, res) {
     }
 
     try {
-        const pool = await getPool();
-        // Verificar duplicados de código
-        const check = await pool.request()
-            .input('codigo', sql.VarChar, codigo.trim().toUpperCase())
-            .query('SELECT id_area FROM Areas WHERE codigo = @codigo');
+        const cleanCodigo = codigo.trim().toUpperCase();
+        const check = await query('SELECT id_area FROM Areas WHERE codigo = ?', [cleanCodigo]);
 
         if (check.recordset.length > 0) {
             return res.status(400).json({
                 success: false,
-                message: `Ya existe un área con el código ${codigo.trim().toUpperCase()}.`
+                message: `Ya existe un área con el código ${cleanCodigo}.`
             });
         }
 
-        const insertRes = await pool.request()
-            .input('codigo', sql.VarChar, codigo.trim().toUpperCase())
-            .input('nombre', sql.NVarChar, nombre.trim())
-            .input('descripcion', sql.NVarChar, descripcion ? descripcion.trim() : null)
-            .query(`
-                INSERT INTO Areas (codigo, nombre, descripcion, activa)
-                OUTPUT INSERTED.id_area
-                VALUES (@codigo, @nombre, @descripcion, 1)
-            `);
+        const insertRes = await query(`
+            INSERT INTO Areas (codigo, nombre, descripcion, activa)
+            VALUES (?, ?, ?, 1)
+            RETURNING id_area
+        `, [cleanCodigo, nombre.trim(), descripcion ? descripcion.trim() : null]);
 
         return res.status(201).json({
             success: true,
             message: `Área "${nombre}" creada exitosamente.`,
-            id_area: insertRes.recordset[0].id_area
+            id_area: insertRes.recordset[0]?.id_area || insertRes.lastInsertRowid
         });
     } catch (err) {
         console.error('Error al crear área:', err);
@@ -92,35 +84,24 @@ async function updateArea(req, res) {
     }
 
     try {
-        const pool = await getPool();
-
-        // Verificar código único exceptuando la actual
-        const check = await pool.request()
-            .input('id', sql.Int, id_area)
-            .input('codigo', sql.VarChar, codigo.trim().toUpperCase())
-            .query('SELECT id_area FROM Areas WHERE codigo = @codigo AND id_area != @id');
+        const cleanCodigo = codigo.trim().toUpperCase();
+        const check = await query('SELECT id_area FROM Areas WHERE codigo = ? AND id_area != ?', [cleanCodigo, id_area]);
 
         if (check.recordset.length > 0) {
             return res.status(400).json({
                 success: false,
-                message: `Ya existe otra área con el código ${codigo.trim().toUpperCase()}.`
+                message: `Ya existe otra área con el código ${cleanCodigo}.`
             });
         }
 
-        await pool.request()
-            .input('id', sql.Int, id_area)
-            .input('codigo', sql.VarChar, codigo.trim().toUpperCase())
-            .input('nombre', sql.NVarChar, nombre.trim())
-            .input('descripcion', sql.NVarChar, descripcion ? descripcion.trim() : null)
-            .input('activa', sql.Bit, activa ? 1 : 0)
-            .query(`
-                UPDATE Areas 
-                SET codigo = @codigo,
-                    nombre = @nombre,
-                    descripcion = @descripcion,
-                    activa = @activa
-                WHERE id_area = @id
-            `);
+        await query(`
+            UPDATE Areas 
+            SET codigo = ?,
+                nombre = ?,
+                descripcion = ?,
+                activa = ?
+            WHERE id_area = ?
+        `, [cleanCodigo, nombre.trim(), descripcion ? descripcion.trim() : null, activa ? 1 : 0, id_area]);
 
         return res.json({
             success: true,
@@ -139,10 +120,12 @@ async function updateArea(req, res) {
 async function toggleAreaStatus(req, res) {
     const { id } = req.params;
     try {
-        const pool = await getPool();
-        const result = await pool.request()
-            .input('id', sql.Int, id)
-            .query('UPDATE Areas SET activa = ~activa OUTPUT INSERTED.activa WHERE id_area = @id');
+        const result = await query(`
+            UPDATE Areas 
+            SET activa = CASE WHEN activa = 1 THEN 0 ELSE 1 END 
+            WHERE id_area = ? 
+            RETURNING activa
+        `, [id]);
 
         if (result.recordset.length === 0) {
             return res.status(404).json({ success: false, message: 'Área no encontrada.' });
@@ -165,10 +148,7 @@ async function toggleAreaStatus(req, res) {
 // Endpoint API para obtener datos de un área
 async function getAreaById(req, res) {
     try {
-        const pool = await getPool();
-        const result = await pool.request()
-            .input('id', sql.Int, req.params.id)
-            .query('SELECT id_area, codigo, nombre, descripcion, activa FROM Areas WHERE id_area = @id');
+        const result = await query('SELECT id_area, codigo, nombre, descripcion, activa FROM Areas WHERE id_area = ?', [req.params.id]);
 
         if (result.recordset.length === 0) {
             return res.status(404).json({ success: false, message: 'Área no encontrada' });

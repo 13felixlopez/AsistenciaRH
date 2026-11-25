@@ -1,4 +1,4 @@
-const { getPool, sql } = require('../config/db');
+const { query } = require('../config/db');
 
 // Obtener ubicaciones de un área en formato JSON
 async function getUbicacionesByArea(req, res) {
@@ -10,15 +10,12 @@ async function getUbicacionesByArea(req, res) {
     }
 
     try {
-        const pool = await getPool();
-        const result = await pool.request()
-            .input('areaId', sql.Int, areaId)
-            .query(`
-                SELECT id_ubicacion, id_area, codigo, nombre, descripcion, activa, fecha_creacion
-                FROM Ubicaciones
-                WHERE id_area = @areaId
-                ORDER BY nombre ASC
-            `);
+        const result = await query(`
+            SELECT id_ubicacion, id_area, codigo, nombre, descripcion, activa, fecha_creacion
+            FROM Ubicaciones
+            WHERE id_area = ?
+            ORDER BY nombre ASC
+        `, [areaId]);
 
         return res.json({
             success: true,
@@ -40,35 +37,24 @@ async function createUbicacion(req, res) {
     }
 
     try {
-        const pool = await getPool();
         const cleanCodigo = codigo.trim().toUpperCase();
         const cleanNombre = nombre.trim();
         const cleanDesc = descripcion ? descripcion.trim() : null;
 
-        // Validar unicidad dentro del área
-        const checkDuplicado = await pool.request()
-            .input('areaId', sql.Int, areaId)
-            .input('codigo', sql.VarChar, cleanCodigo)
-            .input('nombre', sql.NVarChar, cleanNombre)
-            .query(`
-                SELECT id_ubicacion FROM Ubicaciones 
-                WHERE id_area = @areaId AND (codigo = @codigo OR nombre = @nombre)
-            `);
+        const checkDuplicado = await query(`
+            SELECT id_ubicacion FROM Ubicaciones 
+            WHERE id_area = ? AND (codigo = ? OR nombre = ?)
+        `, [areaId, cleanCodigo, cleanNombre]);
 
         if (checkDuplicado.recordset.length > 0) {
             return res.status(400).json({ success: false, message: 'Ya existe una ubicación con ese código o nombre en esta área.' });
         }
 
-        const insertRes = await pool.request()
-            .input('areaId', sql.Int, areaId)
-            .input('codigo', sql.VarChar, cleanCodigo)
-            .input('nombre', sql.NVarChar, cleanNombre)
-            .input('desc', sql.NVarChar, cleanDesc)
-            .query(`
-                INSERT INTO Ubicaciones (id_area, codigo, nombre, descripcion, activa)
-                OUTPUT INSERTED.id_ubicacion, INSERTED.codigo, INSERTED.nombre, INSERTED.descripcion, INSERTED.activa
-                VALUES (@areaId, @codigo, @nombre, @desc, 1)
-            `);
+        const insertRes = await query(`
+            INSERT INTO Ubicaciones (id_area, codigo, nombre, descripcion, activa)
+            VALUES (?, ?, ?, ?, 1)
+            RETURNING id_ubicacion, codigo, nombre, descripcion, activa
+        `, [areaId, cleanCodigo, cleanNombre, cleanDesc]);
 
         return res.status(201).json({
             success: true,
@@ -91,15 +77,11 @@ async function updateUbicacion(req, res) {
     }
 
     try {
-        const pool = await getPool();
         const cleanCodigo = codigo.trim().toUpperCase();
         const cleanNombre = nombre.trim();
         const cleanDesc = descripcion ? descripcion.trim() : null;
 
-        // Obtener el id_area de la ubicación
-        const uActual = await pool.request()
-            .input('id', sql.Int, uId)
-            .query('SELECT id_area FROM Ubicaciones WHERE id_ubicacion = @id');
+        const uActual = await query('SELECT id_area FROM Ubicaciones WHERE id_ubicacion = ?', [uId]);
 
         if (uActual.recordset.length === 0) {
             return res.status(404).json({ success: false, message: 'Ubicación no encontrada.' });
@@ -107,31 +89,20 @@ async function updateUbicacion(req, res) {
 
         const areaId = uActual.recordset[0].id_area;
 
-        // Verificar que no choque con otra ubicación de la misma área
-        const checkDuplicado = await pool.request()
-            .input('id', sql.Int, uId)
-            .input('areaId', sql.Int, areaId)
-            .input('codigo', sql.VarChar, cleanCodigo)
-            .input('nombre', sql.NVarChar, cleanNombre)
-            .query(`
-                SELECT id_ubicacion FROM Ubicaciones 
-                WHERE id_area = @areaId AND id_ubicacion != @id AND (codigo = @codigo OR nombre = @nombre)
-            `);
+        const checkDuplicado = await query(`
+            SELECT id_ubicacion FROM Ubicaciones 
+            WHERE id_area = ? AND id_ubicacion != ? AND (codigo = ? OR nombre = ?)
+        `, [areaId, uId, cleanCodigo, cleanNombre]);
 
         if (checkDuplicado.recordset.length > 0) {
             return res.status(400).json({ success: false, message: 'Ya existe otra ubicación con ese código o nombre en esta área.' });
         }
 
-        await pool.request()
-            .input('id', sql.Int, uId)
-            .input('codigo', sql.VarChar, cleanCodigo)
-            .input('nombre', sql.NVarChar, cleanNombre)
-            .input('desc', sql.NVarChar, cleanDesc)
-            .query(`
-                UPDATE Ubicaciones
-                SET codigo = @codigo, nombre = @nombre, descripcion = @desc
-                WHERE id_ubicacion = @id
-            `);
+        await query(`
+            UPDATE Ubicaciones
+            SET codigo = ?, nombre = ?, descripcion = ?
+            WHERE id_ubicacion = ?
+        `, [cleanCodigo, cleanNombre, cleanDesc, uId]);
 
         return res.json({ success: true, message: `Ubicación "${cleanNombre}" actualizada.` });
     } catch (err) {
@@ -150,15 +121,12 @@ async function toggleUbicacion(req, res) {
     }
 
     try {
-        const pool = await getPool();
-        const toggleRes = await pool.request()
-            .input('id', sql.Int, uId)
-            .query(`
-                UPDATE Ubicaciones
-                SET activa = CASE WHEN activa = 1 THEN 0 ELSE 1 END
-                OUTPUT INSERTED.activa, INSERTED.nombre
-                WHERE id_ubicacion = @id
-            `);
+        const toggleRes = await query(`
+            UPDATE Ubicaciones
+            SET activa = CASE WHEN activa = 1 THEN 0 ELSE 1 END
+            WHERE id_ubicacion = ?
+            RETURNING activa, nombre
+        `, [uId]);
 
         if (toggleRes.recordset.length === 0) {
             return res.status(404).json({ success: false, message: 'Ubicación no encontrada.' });

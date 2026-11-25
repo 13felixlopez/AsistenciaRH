@@ -1,8 +1,8 @@
 const jwt = require('jsonwebtoken');
-const { getPool, sql } = require('../config/db');
+const { query } = require('../config/db');
 
-// Middleware para verificar que el usuario esté autenticado mediante JWT
-function isAuthenticated(req, res, next) {
+// Middleware para verificar autenticación JWT con validación de estado activo en tiempo real
+async function isAuthenticated(req, res, next) {
     let token = null;
 
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
@@ -20,8 +20,30 @@ function isAuthenticated(req, res, next) {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Verificación en tiempo real de usuario activo en base de datos (revocación inmediata)
+        try {
+            const userCheck = await query(
+                'SELECT id_usuario, activo, id_rol FROM Usuarios WHERE id_usuario = ?',
+                [decoded.id_usuario]
+            );
+
+            if (userCheck.recordset.length === 0 || !userCheck.recordset[0].activo) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Tu cuenta se encuentra inactiva o tu sesión ha sido revocada por el Administrador.',
+                    revoked: true
+                });
+            }
+
+            if (userCheck.recordset[0].id_rol !== decoded.id_rol) {
+                decoded.id_rol = userCheck.recordset[0].id_rol;
+            }
+        } catch (dbErr) {
+            console.warn('Advertencia en verificación de estado activo:', dbErr.message);
+        }
+
         req.user = decoded;
-        // Compatibilidad con código que usa req.session.user
         req.session = req.session || {};
         req.session.user = decoded;
         res.locals.currentUser = decoded;
@@ -35,7 +57,7 @@ function isAuthenticated(req, res, next) {
     }
 }
 
-// Middleware para verificar que el usuario sea Administrador
+// Middleware para verificar que sea Administrador
 function isAdmin(req, res, next) {
     const user = req.user || (req.session && req.session.user);
     if (user && user.rol_codigo === 'ADMIN') {
@@ -47,14 +69,14 @@ function isAdmin(req, res, next) {
     });
 }
 
-// Helper para identificar si un usuario es de Solo Vista (Consultor)
+// Helper para identificar si un usuario es de Solo Vista
 function isSoloVistaUser(user) {
     if (!user) return false;
     const rol = String(user.rol_codigo || '').toUpperCase();
     return rol === 'CONSULTOR' || rol === 'SOLO_VISTA' || user.id_rol === 3;
 }
 
-// Middleware para bloquear acciones de registro a usuarios de Solo Vista
+// Middleware para bloquear acciones de captura a Solo Vista
 function isNotSoloVista(req, res, next) {
     const user = req.user || (req.session && req.session.user);
     if (isSoloVistaUser(user)) {
@@ -68,12 +90,11 @@ function isNotSoloVista(req, res, next) {
 
 // Obtener las áreas permitidas para el usuario actual
 async function getUserAllowedAreas(userId, userRole) {
-    const pool = await getPool();
     const roleUpper = String(userRole || '').toUpperCase();
 
-    // 1. Si es Administrador, tiene acceso total irrestricto a todas las áreas activas
+    // 1. Si es Administrador general, tiene acceso irrestricto a todas las áreas activas
     if (roleUpper === 'ADMIN') {
-        const result = await pool.request().query(`
+        const result = await query(`
             SELECT id_area, codigo, nombre, descripcion, activa,
                    1 AS permite_registro, 1 AS permite_reportes
             FROM Areas 
@@ -83,17 +104,15 @@ async function getUserAllowedAreas(userId, userRole) {
         return result.recordset;
     }
 
-    // 2. Si no es Admin, áreas explícitamente asignadas en Usuario_Areas
-    const assignedAreas = await pool.request()
-        .input('userId', sql.Int, userId)
-        .query(`
-            SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
-                   ua.permite_registro, ua.permite_reportes
-            FROM Areas a
-            INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
-            WHERE ua.id_usuario = @userId AND a.activa = 1
-            ORDER BY a.nombre ASC
-        `);
+    // 2. Si el usuario no es admin, consultar áreas explícitamente asignadas en Usuario_Areas
+    const assignedAreas = await query(`
+        SELECT a.id_area, a.codigo, a.nombre, a.descripcion, a.activa,
+               ua.permite_registro, ua.permite_reportes
+        FROM Areas a
+        INNER JOIN Usuario_Areas ua ON a.id_area = ua.id_area
+        WHERE ua.id_usuario = ? AND a.activa = 1
+        ORDER BY a.nombre ASC
+    `, [userId]);
 
     return assignedAreas.recordset || [];
 }
@@ -105,85 +124,67 @@ async function hasAreaAccess(userId, userRole, areaId, type = 'any') {
         return true;
     }
 
-    const pool = await getPool();
     const aId = parseInt(areaId, 10);
-
-    let query = `
+    let sql = `
         SELECT 1 
         FROM Usuario_Areas ua
         INNER JOIN Areas a ON ua.id_area = a.id_area
-        WHERE ua.id_usuario = @userId AND ua.id_area = @areaId AND a.activa = 1
+        WHERE ua.id_usuario = ? AND ua.id_area = ? AND a.activa = 1
     `;
+    const params = [userId, aId];
+
     if (type === 'registro') {
-        query += ' AND ua.permite_registro = 1';
+        sql += ' AND ua.permite_registro = 1';
     } else if (type === 'reporte') {
-        query += ' AND ua.permite_reportes = 1';
+        sql += ' AND ua.permite_reportes = 1';
     }
 
-    const result = await pool.request()
-        .input('userId', sql.Int, userId)
-        .input('areaId', sql.Int, aId)
-        .query(query);
-
+    const result = await query(sql, params);
     return result.recordset.length > 0;
 }
 
 // Obtener las ubicaciones permitidas para un usuario dentro de un área
 async function getUserAllowedLocations(userId, userRole, areaId) {
-    const pool = await getPool();
     const aId = parseInt(areaId, 10);
     const roleUpper = String(userRole || '').toUpperCase();
 
-    // Administrador tiene acceso total a todas las ubicaciones activas del área
     if (roleUpper === 'ADMIN') {
-        const result = await pool.request()
-            .input('areaId', sql.Int, aId)
-            .query(`
-                SELECT id_ubicacion, id_area, codigo, nombre, descripcion, activa
-                FROM Ubicaciones
-                WHERE id_area = @areaId AND activa = 1
-                ORDER BY nombre ASC
-            `);
+        const result = await query(`
+            SELECT id_ubicacion, id_area, codigo, nombre, descripcion, activa
+            FROM Ubicaciones
+            WHERE id_area = ? AND activa = 1
+            ORDER BY nombre ASC
+        `, [aId]);
         return result.recordset;
     }
 
     // Verificar si el usuario tiene asignaciones específicas de ubicación para esta área
-    const countRes = await pool.request()
-        .input('userId', sql.Int, userId)
-        .input('areaId', sql.Int, aId)
-        .query(`
-            SELECT COUNT(*) AS total
-            FROM Usuario_Ubicaciones uu
-            INNER JOIN Ubicaciones u ON uu.id_ubicacion = u.id_ubicacion
-            WHERE uu.id_usuario = @userId AND u.id_area = @areaId AND u.activa = 1
-        `);
+    const countRes = await query(`
+        SELECT COUNT(*) AS total
+        FROM Usuario_Ubicaciones uu
+        INNER JOIN Ubicaciones u ON uu.id_ubicacion = u.id_ubicacion
+        WHERE uu.id_usuario = ? AND u.id_area = ? AND u.activa = 1
+    `, [userId, aId]);
 
     const hasSpecificLocationsInArea = (countRes.recordset[0]?.total || 0) > 0;
 
     if (!hasSpecificLocationsInArea) {
-        // Si no tiene ubicaciones específicas asignadas para esta área, tiene acceso a todas las ubicaciones activas del área
-        const result = await pool.request()
-            .input('areaId', sql.Int, aId)
-            .query(`
-                SELECT id_ubicacion, id_area, codigo, nombre, descripcion, activa
-                FROM Ubicaciones
-                WHERE id_area = @areaId AND activa = 1
-                ORDER BY nombre ASC
-            `);
+        const result = await query(`
+            SELECT id_ubicacion, id_area, codigo, nombre, descripcion, activa
+            FROM Ubicaciones
+            WHERE id_area = ? AND activa = 1
+            ORDER BY nombre ASC
+        `, [aId]);
         return result.recordset;
     }
 
-    // Usuario operativo ve sus ubicaciones asignadas
-    const result = await pool.request()
-        .input('userId', sql.Int, userId)
-        .input('areaId', sql.Int, aId)
-        .query(`
-            SELECT u.id_ubicacion, u.id_area, u.codigo, u.nombre, u.descripcion, u.activa
-            FROM Ubicaciones u
-            INNER JOIN Usuario_Ubicaciones uu ON u.id_ubicacion = uu.id_ubicacion
-            WHERE uu.id_usuario = @userId AND u.id_area = @areaId AND u.activa = 1
-            ORDER BY u.nombre ASC
-        `);
+    const result = await query(`
+        SELECT u.id_ubicacion, u.id_area, u.codigo, u.nombre, u.descripcion, u.activa
+        FROM Ubicaciones u
+        INNER JOIN Usuario_Ubicaciones uu ON u.id_ubicacion = uu.id_ubicacion
+        WHERE uu.id_usuario = ? AND u.id_area = ? AND u.activa = 1
+        ORDER BY u.nombre ASC
+    `, [userId, aId]);
     return result.recordset;
 }
 
@@ -194,7 +195,6 @@ async function hasLocationAccess(userId, userRole, areaId, locationId) {
         return true;
     }
 
-    const pool = await getPool();
     const aId = parseInt(areaId, 10);
     const lId = locationId ? parseInt(locationId, 10) : null;
 
@@ -203,35 +203,28 @@ async function hasLocationAccess(userId, userRole, areaId, locationId) {
     }
 
     // Si el usuario no tiene ubicaciones específicas asignadas para esta área, validar acceso general al área
-    const countRes = await pool.request()
-        .input('userId', sql.Int, userId)
-        .input('areaId', sql.Int, aId)
-        .query(`
-            SELECT COUNT(*) AS total
-            FROM Usuario_Ubicaciones uu
-            INNER JOIN Ubicaciones u ON uu.id_ubicacion = u.id_ubicacion
-            WHERE uu.id_usuario = @userId AND u.id_area = @areaId AND u.activa = 1
-        `);
+    const countRes = await query(`
+        SELECT COUNT(*) AS total
+        FROM Usuario_Ubicaciones uu
+        INNER JOIN Ubicaciones u ON uu.id_ubicacion = u.id_ubicacion
+        WHERE uu.id_usuario = ? AND u.id_area = ? AND u.activa = 1
+    `, [userId, aId]);
 
     const hasSpecific = (countRes.recordset[0]?.total || 0) > 0;
     if (!hasSpecific) {
         return hasAreaAccess(userId, userRole, aId);
     }
 
-    const result = await pool.request()
-        .input('userId', sql.Int, userId)
-        .input('areaId', sql.Int, aId)
-        .input('locationId', sql.Int, lId)
-        .query(`
-            SELECT 1 
-            FROM Usuario_Ubicaciones uu
-            INNER JOIN Ubicaciones u ON uu.id_ubicacion = u.id_ubicacion
-            INNER JOIN Usuario_Areas ua ON ua.id_area = u.id_area AND ua.id_usuario = uu.id_usuario
-            WHERE uu.id_usuario = @userId 
-              AND uu.id_ubicacion = @locationId 
-              AND u.id_area = @areaId 
-              AND u.activa = 1
-        `);
+    const result = await query(`
+        SELECT 1 
+        FROM Usuario_Ubicaciones uu
+        INNER JOIN Ubicaciones u ON uu.id_ubicacion = u.id_ubicacion
+        INNER JOIN Usuario_Areas ua ON ua.id_area = u.id_area AND ua.id_usuario = uu.id_usuario
+        WHERE uu.id_usuario = ? 
+          AND uu.id_ubicacion = ? 
+          AND u.id_area = ? 
+          AND u.activa = 1
+    `, [userId, lId, aId]);
 
     return result.recordset.length > 0;
 }

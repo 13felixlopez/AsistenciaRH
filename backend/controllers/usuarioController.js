@@ -1,11 +1,10 @@
 const bcrypt = require('bcryptjs');
-const { getPool, sql } = require('../config/db');
+const { query } = require('../config/db');
 
 // Listar todos los usuarios
 async function listUsuarios(req, res) {
     try {
-        const pool = await getPool();
-        const usersResult = await pool.request().query(`
+        const usersResult = await query(`
             SELECT 
                 u.id_usuario,
                 u.nombre,
@@ -19,7 +18,7 @@ async function listUsuarios(req, res) {
                 r.codigo AS rol_codigo,
                 r.nombre AS rol_nombre,
                 (
-                    SELECT STRING_AGG(a.nombre, ', ')
+                    SELECT GROUP_CONCAT(a.nombre, ', ')
                     FROM Usuario_Areas ua
                     INNER JOIN Areas a ON ua.id_area = a.id_area
                     WHERE ua.id_usuario = u.id_usuario
@@ -30,7 +29,7 @@ async function listUsuarios(req, res) {
                     WHERE ua.id_usuario = u.id_usuario
                 ) AS total_areas_asignadas,
                 (
-                    SELECT STRING_AGG(CONCAT(a.nombre, ': ', ub.nombre), ' | ')
+                    SELECT GROUP_CONCAT(a.nombre || ': ' || ub.nombre, ' | ')
                     FROM Usuario_Ubicaciones uu
                     INNER JOIN Ubicaciones ub ON uu.id_ubicacion = ub.id_ubicacion
                     INNER JOIN Areas a ON ub.id_area = a.id_area
@@ -59,68 +58,64 @@ async function listUsuarios(req, res) {
     }
 }
 
-// Obtener datos auxiliares para creación/edición (Roles, Áreas y Ubicaciones, y datos de usuario si se pasa id)
+// Obtener datos para formulario de usuario (catálogos y asignaciones)
 async function getUserFormData(req, res) {
-    const id = req.params.id ? parseInt(req.params.id, 10) : null;
+    const userId = req.params.id ? parseInt(req.params.id, 10) : null;
 
     try {
-        const pool = await getPool();
-        const rolesRes = await pool.request().query('SELECT id_rol, codigo, nombre, descripcion FROM Roles WHERE activo = 1 ORDER BY id_rol ASC');
-        const areasRes = await pool.request().query('SELECT id_area, codigo, nombre FROM Areas WHERE activa = 1 ORDER BY nombre ASC');
-        const ubicacionesRes = await pool.request().query('SELECT id_ubicacion, id_area, codigo, nombre FROM Ubicaciones WHERE activa = 1 ORDER BY nombre ASC');
+        const roles = await query('SELECT id_rol, codigo, nombre, descripcion FROM Roles WHERE activo = 1 ORDER BY id_rol ASC');
+        const areasRes = await query('SELECT id_area, codigo, nombre FROM Areas WHERE activa = 1 ORDER BY nombre ASC');
+        const ubicacionesRes = await query('SELECT id_ubicacion, id_area, codigo, nombre FROM Ubicaciones WHERE activa = 1 ORDER BY nombre ASC');
 
         const areas = areasRes.recordset.map(area => ({
             ...area,
             ubicaciones: ubicacionesRes.recordset.filter(u => u.id_area === area.id_area)
         }));
 
-        let userData = null;
+        let user = null;
         let assignedAreaIds = [];
         let assignedLocationIds = [];
 
-        if (id) {
-            const userRes = await pool.request()
-                .input('id', sql.Int, id)
-                .query(`
-                    SELECT id_usuario, nombre, usuario, email, cargo, id_rol, activo 
-                    FROM Usuarios 
-                    WHERE id_usuario = @id
-                `);
+        if (userId) {
+            const uRes = await query(`
+                SELECT u.id_usuario, u.nombre, u.usuario, u.email, u.cargo, u.activo, u.id_rol,
+                       r.codigo AS rol_codigo, r.nombre AS rol_nombre
+                FROM Usuarios u
+                INNER JOIN Roles r ON u.id_rol = r.id_rol
+                WHERE u.id_usuario = ?
+            `, [userId]);
 
-            if (userRes.recordset.length === 0) {
-                return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
+            if (uRes.recordset.length > 0) {
+                user = uRes.recordset[0];
+                const uaRes = await query('SELECT id_area FROM Usuario_Areas WHERE id_usuario = ?', [userId]);
+                assignedAreaIds = uaRes.recordset.map(r => r.id_area);
+
+                const uuRes = await query('SELECT id_ubicacion FROM Usuario_Ubicaciones WHERE id_usuario = ?', [userId]);
+                assignedLocationIds = uuRes.recordset.map(r => r.id_ubicacion);
             }
-
-            userData = userRes.recordset[0];
-
-            const userAreasRes = await pool.request()
-                .input('id', sql.Int, id)
-                .query('SELECT id_area FROM Usuario_Areas WHERE id_usuario = @id');
-            assignedAreaIds = userAreasRes.recordset.map(ua => ua.id_area);
-
-            const userLocationsRes = await pool.request()
-                .input('id', sql.Int, id)
-                .query('SELECT id_ubicacion FROM Usuario_Ubicaciones WHERE id_usuario = @id');
-            assignedLocationIds = userLocationsRes.recordset.map(ul => ul.id_ubicacion);
         }
 
         return res.json({
             success: true,
-            roles: rolesRes.recordset,
+            roles: roles.recordset,
             areas,
-            user: userData,
+            user,
             assignedAreaIds,
             assignedLocationIds
         });
     } catch (err) {
-        console.error('Error al obtener datos de formulario de usuario:', err);
-        return res.status(500).json({ success: false, message: 'Error interno: ' + err.message });
+        console.error('Error al obtener catálogos de usuario:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al cargar opciones de usuario.'
+        });
     }
 }
 
-// Crear usuario y asignar áreas y ubicaciones
+// Crear usuario y asignar áreas
 async function createUser(req, res) {
     const { nombre, usuario, email, password, cargo, id_rol, areas, ubicaciones } = req.body;
+
     const cleanUsername = (usuario || (email ? email.split('@')[0] : '')).trim().toLowerCase();
 
     if (!nombre || !cleanUsername || !email || !password || !id_rol) {
@@ -131,13 +126,10 @@ async function createUser(req, res) {
     }
 
     try {
-        const pool = await getPool();
-
-        // Validar unicidad de correo y nombre de usuario
-        const check = await pool.request()
-            .input('email', sql.VarChar, email.trim().toLowerCase())
-            .input('usuario', sql.VarChar, cleanUsername)
-            .query('SELECT id_usuario FROM Usuarios WHERE LOWER(email) = @email OR LOWER(usuario) = @usuario');
+        const check = await query(
+            'SELECT id_usuario FROM Usuarios WHERE LOWER(email) = ? OR LOWER(usuario) = ?',
+            [email.trim().toLowerCase(), cleanUsername]
+        );
 
         if (check.recordset.length > 0) {
             return res.status(400).json({
@@ -147,87 +139,48 @@ async function createUser(req, res) {
         }
 
         const passwordHash = await bcrypt.hash(password, 10);
-        const transaction = new sql.Transaction(pool);
-        await transaction.begin();
 
-        try {
-            const userInsert = await new sql.Request(transaction)
-                .input('nombre', sql.NVarChar, nombre.trim())
-                .input('usuario', sql.VarChar, cleanUsername)
-                .input('email', sql.VarChar, email.trim().toLowerCase())
-                .input('password', sql.VarChar, passwordHash)
-                .input('cargo', sql.NVarChar, cargo ? cargo.trim() : null)
-                .input('id_rol', sql.Int, parseInt(id_rol, 10))
-                .query(`
-                    INSERT INTO Usuarios (nombre, usuario, email, password_hash, cargo, id_rol, activo)
-                    OUTPUT INSERTED.id_usuario
-                    VALUES (@nombre, @usuario, @email, @password, @cargo, @id_rol, 1)
-                `);
+        const userInsert = await query(`
+            INSERT INTO Usuarios (nombre, usuario, email, password_hash, cargo, id_rol, activo)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+            RETURNING id_usuario
+        `, [nombre.trim(), cleanUsername, email.trim().toLowerCase(), passwordHash, cargo ? cargo.trim() : null, parseInt(id_rol, 10)]);
 
-            const newUserId = userInsert.recordset[0].id_usuario;
+        const newUserId = userInsert.recordset[0]?.id_usuario || userInsert.lastInsertRowid;
 
-            // Asignar áreas
-            const roleRes = await new sql.Request(transaction)
-                .input('id_rol', sql.Int, parseInt(id_rol, 10))
-                .query('SELECT codigo FROM Roles WHERE id_rol = @id_rol');
-            const rolCodigo = roleRes.recordset[0]?.codigo;
-            const isSoloVista = rolCodigo === 'CONSULTOR' || rolCodigo === 'SOLO_VISTA' || parseInt(id_rol, 10) === 3;
-            const permiteRegistro = isSoloVista ? 0 : 1;
-            const permiteReportes = 1;
+        // Asignar áreas
+        const isSoloVista = parseInt(id_rol, 10) === 3;
+        const permiteRegistro = isSoloVista ? 0 : 1;
+        const permiteReportes = 1;
 
-            let selectedAreas = [];
-            if (Array.isArray(areas)) {
-                selectedAreas = areas;
-            } else if (typeof areas === 'string') {
-                selectedAreas = [areas];
+        let selectedAreas = Array.isArray(areas) ? areas : (areas ? [areas] : []);
+        for (const areaIdStr of selectedAreas) {
+            const aId = parseInt(areaIdStr, 10);
+            if (aId) {
+                await query(`
+                    INSERT INTO Usuario_Areas (id_usuario, id_area, permite_registro, permite_reportes)
+                    VALUES (?, ?, ?, ?)
+                `, [newUserId, aId, permiteRegistro, permiteReportes]);
             }
-
-            for (const areaIdStr of selectedAreas) {
-                const aId = parseInt(areaIdStr, 10);
-                if (aId) {
-                    await new sql.Request(transaction)
-                        .input('userId', sql.Int, newUserId)
-                        .input('areaId', sql.Int, aId)
-                        .input('permiteRegistro', sql.Bit, permiteRegistro)
-                        .input('permiteReportes', sql.Bit, permiteReportes)
-                        .query(`
-                            INSERT INTO Usuario_Areas (id_usuario, id_area, permite_registro, permite_reportes)
-                            VALUES (@userId, @areaId, @permiteRegistro, @permiteReportes)
-                        `);
-                }
-            }
-
-            // Asignar ubicaciones
-            let selectedLocations = [];
-            if (Array.isArray(ubicaciones)) {
-                selectedLocations = ubicaciones;
-            } else if (typeof ubicaciones === 'string') {
-                selectedLocations = [ubicaciones];
-            }
-
-            for (const locIdStr of selectedLocations) {
-                const locId = parseInt(locIdStr, 10);
-                if (locId) {
-                    await new sql.Request(transaction)
-                        .input('userId', sql.Int, newUserId)
-                        .input('locId', sql.Int, locId)
-                        .query(`
-                            INSERT INTO Usuario_Ubicaciones (id_usuario, id_ubicacion)
-                            VALUES (@userId, @locId)
-                        `);
-                }
-            }
-
-            await transaction.commit();
-            return res.status(201).json({
-                success: true,
-                message: `Usuario "${nombre}" creado exitosamente con sus áreas y ubicaciones autorizadas.`,
-                id_usuario: newUserId
-            });
-        } catch (trxError) {
-            await transaction.rollback();
-            throw trxError;
         }
+
+        // Asignar ubicaciones
+        let selectedLocations = Array.isArray(ubicaciones) ? ubicaciones : (ubicaciones ? [ubicaciones] : []);
+        for (const locIdStr of selectedLocations) {
+            const locId = parseInt(locIdStr, 10);
+            if (locId) {
+                await query(`
+                    INSERT INTO Usuario_Ubicaciones (id_usuario, id_ubicacion)
+                    VALUES (?, ?)
+                `, [newUserId, locId]);
+            }
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: `Usuario "${nombre}" creado exitosamente.`,
+            id_usuario: newUserId
+        });
     } catch (err) {
         console.error('Error al crear usuario:', err);
         return res.status(500).json({
@@ -237,269 +190,181 @@ async function createUser(req, res) {
     }
 }
 
-// Actualizar usuario existente
+// Editar usuario
 async function updateUser(req, res) {
     const { id } = req.params;
     const { nombre, usuario, email, password, cargo, id_rol, activo, areas, ubicaciones } = req.body;
+
     const cleanUsername = (usuario || (email ? email.split('@')[0] : '')).trim().toLowerCase();
 
-    if (!nombre || !cleanUsername || !email || !id_rol) {
+    if (!id || !nombre || !cleanUsername || !email || !id_rol) {
         return res.status(400).json({
             success: false,
-            message: 'Nombre, nombre de usuario, correo y rol son obligatorios.'
+            message: 'Nombre, nombre de usuario, correo electrónico y rol son obligatorios.'
         });
     }
 
     try {
-        const pool = await getPool();
-
-        // Validar unicidad excluyendo el actual
-        const check = await pool.request()
-            .input('id', sql.Int, id)
-            .input('email', sql.VarChar, email.trim().toLowerCase())
-            .input('usuario', sql.VarChar, cleanUsername)
-            .query('SELECT id_usuario FROM Usuarios WHERE (LOWER(email) = @email OR LOWER(usuario) = @usuario) AND id_usuario != @id');
+        const check = await query(
+            'SELECT id_usuario FROM Usuarios WHERE (LOWER(email) = ? OR LOWER(usuario) = ?) AND id_usuario != ?',
+            [email.trim().toLowerCase(), cleanUsername, id]
+        );
 
         if (check.recordset.length > 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Ya existe otro usuario con ese correo electrónico o nombre de usuario.'
+                message: 'El correo electrónico o nombre de usuario ya está en uso por otra cuenta.'
             });
         }
 
-        const transaction = new sql.Transaction(pool);
-        await transaction.begin();
-
-        try {
-            let updateQuery = `
-                UPDATE Usuarios
-                SET nombre = @nombre,
-                    usuario = @usuario,
-                    email = @email,
-                    cargo = @cargo,
-                    id_rol = @id_rol,
-                    activo = @activo
-            `;
-
-            const reqUpdate = new sql.Request(transaction)
-                .input('id', sql.Int, id)
-                .input('nombre', sql.NVarChar, nombre.trim())
-                .input('usuario', sql.VarChar, cleanUsername)
-                .input('email', sql.VarChar, email.trim().toLowerCase())
-                .input('cargo', sql.NVarChar, cargo ? cargo.trim() : null)
-                .input('id_rol', sql.Int, parseInt(id_rol, 10))
-                .input('activo', sql.Bit, (activo === 1 || activo === '1' || activo === true || activo === 'true' || activo === 'on') ? 1 : 0);
-
-            if (password && password.trim().length > 0) {
-                const passwordHash = await bcrypt.hash(password.trim(), 10);
-                updateQuery += `, password_hash = @password`;
-                reqUpdate.input('password', sql.VarChar, passwordHash);
-            }
-
-            updateQuery += ` WHERE id_usuario = @id`;
-            await reqUpdate.query(updateQuery);
-
-            // Reemplazar asignación de áreas
-            await new sql.Request(transaction)
-                .input('id', sql.Int, id)
-                .query('DELETE FROM Usuario_Areas WHERE id_usuario = @id');
-
-            const roleRes = await new sql.Request(transaction)
-                .input('id_rol', sql.Int, parseInt(id_rol, 10))
-                .query('SELECT codigo FROM Roles WHERE id_rol = @id_rol');
-            const rolCodigo = roleRes.recordset[0]?.codigo;
-            const isSoloVista = rolCodigo === 'CONSULTOR' || rolCodigo === 'SOLO_VISTA' || parseInt(id_rol, 10) === 3;
-            const permiteRegistro = isSoloVista ? 0 : 1;
-            const permiteReportes = 1;
-
-            let selectedAreas = [];
-            if (Array.isArray(areas)) {
-                selectedAreas = areas;
-            } else if (typeof areas === 'string') {
-                selectedAreas = [areas];
-            }
-
-            for (const areaIdStr of selectedAreas) {
-                const aId = parseInt(areaIdStr, 10);
-                if (aId) {
-                    await new sql.Request(transaction)
-                        .input('userId', sql.Int, id)
-                        .input('areaId', sql.Int, aId)
-                        .input('permiteRegistro', sql.Bit, permiteRegistro)
-                        .input('permiteReportes', sql.Bit, permiteReportes)
-                        .query(`
-                            INSERT INTO Usuario_Areas (id_usuario, id_area, permite_registro, permite_reportes)
-                            VALUES (@userId, @areaId, @permiteRegistro, @permiteReportes)
-                        `);
-                }
-            }
-
-            // Reemplazar asignación de ubicaciones
-            await new sql.Request(transaction)
-                .input('id', sql.Int, id)
-                .query('DELETE FROM Usuario_Ubicaciones WHERE id_usuario = @id');
-
-            let selectedLocations = [];
-            if (Array.isArray(ubicaciones)) {
-                selectedLocations = ubicaciones;
-            } else if (typeof ubicaciones === 'string') {
-                selectedLocations = [ubicaciones];
-            }
-
-            for (const locIdStr of selectedLocations) {
-                const locId = parseInt(locIdStr, 10);
-                if (locId) {
-                    await new sql.Request(transaction)
-                        .input('userId', sql.Int, id)
-                        .input('locId', sql.Int, locId)
-                        .query(`
-                            INSERT INTO Usuario_Ubicaciones (id_usuario, id_ubicacion)
-                            VALUES (@userId, @locId)
-                        `);
-                }
-            }
-
-            await transaction.commit();
-            return res.json({
-                success: true,
-                message: `Usuario "${nombre}" actualizado correctamente.`
-            });
-        } catch (trxError) {
-            await transaction.rollback();
-            throw trxError;
+        if (password && password.trim().length > 0) {
+            const passwordHash = await bcrypt.hash(password.trim(), 10);
+            await query(`
+                UPDATE Usuarios 
+                SET nombre = ?, usuario = ?, email = ?, cargo = ?, id_rol = ?, activo = ?, password_hash = ?
+                WHERE id_usuario = ?
+            `, [nombre.trim(), cleanUsername, email.trim().toLowerCase(), cargo ? cargo.trim() : null, parseInt(id_rol, 10), activo ? 1 : 0, passwordHash, id]);
+        } else {
+            await query(`
+                UPDATE Usuarios 
+                SET nombre = ?, usuario = ?, email = ?, cargo = ?, id_rol = ?, activo = ?
+                WHERE id_usuario = ?
+            `, [nombre.trim(), cleanUsername, email.trim().toLowerCase(), cargo ? cargo.trim() : null, parseInt(id_rol, 10), activo ? 1 : 0, id]);
         }
+
+        // Reemplazar asignación de áreas
+        await query('DELETE FROM Usuario_Areas WHERE id_usuario = ?', [id]);
+
+        const isSoloVista = parseInt(id_rol, 10) === 3;
+        const permiteRegistro = isSoloVista ? 0 : 1;
+        const permiteReportes = 1;
+
+        let selectedAreas = Array.isArray(areas) ? areas : (areas ? [areas] : []);
+        for (const areaIdStr of selectedAreas) {
+            const aId = parseInt(areaIdStr, 10);
+            if (aId) {
+                await query(`
+                    INSERT INTO Usuario_Areas (id_usuario, id_area, permite_registro, permite_reportes)
+                    VALUES (?, ?, ?, ?)
+                `, [id, aId, permiteRegistro, permiteReportes]);
+            }
+        }
+
+        // Reemplazar asignación de ubicaciones
+        await query('DELETE FROM Usuario_Ubicaciones WHERE id_usuario = ?', [id]);
+
+        let selectedLocations = Array.isArray(ubicaciones) ? ubicaciones : (ubicaciones ? [ubicaciones] : []);
+        for (const locIdStr of selectedLocations) {
+            const locId = parseInt(locIdStr, 10);
+            if (locId) {
+                await query(`
+                    INSERT INTO Usuario_Ubicaciones (id_usuario, id_ubicacion)
+                    VALUES (?, ?)
+                `, [id, locId]);
+            }
+        }
+
+        return res.json({
+            success: true,
+            message: `Usuario "${nombre}" actualizado correctamente.`
+        });
     } catch (err) {
         console.error('Error al actualizar usuario:', err);
         return res.status(500).json({
             success: false,
-            message: 'Error al modificar usuario: ' + err.message
+            message: 'Error al modificar el usuario: ' + err.message
         });
     }
 }
 
-// Alternar estado activo / inactivo
+// Activar o desactivar usuario
 async function toggleUserStatus(req, res) {
     const { id } = req.params;
-    const currentUserId = (req.user || req.session.user).id_usuario;
-
-    if (parseInt(id, 10) === currentUserId) {
-        return res.status(400).json({
-            success: false,
-            message: 'No puedes desactivar tu propia cuenta en sesión.'
-        });
-    }
-
     try {
-        const pool = await getPool();
-        const result = await pool.request()
-            .input('id', sql.Int, id)
-            .query('UPDATE Usuarios SET activo = ~activo OUTPUT INSERTED.activo, INSERTED.nombre WHERE id_usuario = @id');
+        const result = await query(`
+            UPDATE Usuarios 
+            SET activo = CASE WHEN activo = 1 THEN 0 ELSE 1 END 
+            WHERE id_usuario = ? 
+            RETURNING activo
+        `, [id]);
 
         if (result.recordset.length === 0) {
             return res.status(404).json({ success: false, message: 'Usuario no encontrado.' });
         }
 
-        const { activo, nombre } = result.recordset[0];
-        const statusStr = activo ? 'activado' : 'desactivado';
-
         return res.json({
             success: true,
-            activo,
-            message: `Usuario "${nombre}" ${statusStr} exitosamente.`
+            message: 'Estado del usuario actualizado.',
+            activo: result.recordset[0].activo
         });
     } catch (err) {
-        console.error('Error al alternar estado de usuario:', err);
+        console.error('Error al alternar estado del usuario:', err);
         return res.status(500).json({
             success: false,
-            message: 'Error al modificar estado: ' + err.message
+            message: 'Error al cambiar el estado del usuario.'
         });
     }
 }
 
-// Eliminar o desactivar usuario con protección de integridad histórica
+// Eliminar usuario con protección de integridad referencial
 async function deleteUser(req, res) {
+    const user = req.user || req.session.user;
     const { id } = req.params;
-    const currentUser = req.user || (req.session && req.session.user);
-    const currentUserId = currentUser ? currentUser.id_usuario : null;
+    const userId = parseInt(id, 10);
 
-    if (!id) {
-        return res.status(400).json({ success: false, message: 'ID de usuario no proporcionado.' });
+    if (!userId) {
+        return res.status(400).json({ success: false, message: 'ID de usuario inválido.' });
     }
 
-    const targetId = parseInt(id, 10);
-
-    // 1. Prohibir auto-eliminación
-    if (currentUserId && currentUserId === targetId) {
-        return res.status(400).json({ success: false, message: 'Acción denegada: No puedes eliminar tu propia cuenta de usuario.' });
+    if (user && user.id_usuario === userId) {
+        return res.status(400).json({ success: false, message: 'No puedes eliminar tu propia cuenta de usuario en sesión activa.' });
     }
 
     try {
-        const pool = await getPool();
-
-        // 2. Obtener datos del usuario
-        const userRes = await pool.request()
-            .input('id', sql.Int, targetId)
-            .query('SELECT u.id_usuario, u.usuario, u.nombre, u.email, r.codigo AS rol_codigo FROM Usuarios u INNER JOIN Roles r ON u.id_rol = r.id_rol WHERE u.id_usuario = @id');
-
+        const userRes = await query('SELECT id_usuario, usuario, nombre FROM Usuarios WHERE id_usuario = ?', [userId]);
         if (userRes.recordset.length === 0) {
-            return res.status(404).json({ success: false, message: 'El usuario especificado no existe.' });
+            return res.status(404).json({ success: false, message: 'El usuario no existe.' });
         }
-
         const targetUser = userRes.recordset[0];
-
-        // 3. Prohibir eliminar al superadministrador inicial
-        if (targetUser.usuario === 'admin' || targetUser.email === 'admin@asistencia.com') {
-            return res.status(400).json({ success: false, message: 'Acción denegada: No está permitido eliminar la cuenta raíz de Administración.' });
+        if (targetUser.usuario === 'admin') {
+            return res.status(403).json({ success: false, message: 'La cuenta maestra de Administrador del sistema no puede ser eliminada.' });
         }
 
-        // 4. Verificar si tiene registros históricos en Asistencias_Diarias
-        const asistenciasCheck = await pool.request()
-            .input('id', sql.Int, targetId)
-            .query('SELECT COUNT(1) AS total FROM Asistencias_Diarias WHERE id_usuario_registro = @id OR id_usuario_modificacion = @id');
+        // Verificar si tiene asistencias registradas o modificadas
+        const asisRes = await query(`
+            SELECT COUNT(*) AS total
+            FROM Asistencias_Diarias
+            WHERE id_usuario_registro = ? OR id_usuario_modificacion = ?
+        `, [userId, userId]);
 
-        const tieneAsistencias = (asistenciasCheck.recordset[0].total || 0) > 0;
+        const hasHistory = (asisRes.recordset[0]?.total || 0) > 0;
 
-        if (tieneAsistencias) {
-            // Baja lógica: desactivar y revocar permisos para preservar la integridad de los reportes
-            const trx = new sql.Transaction(pool);
-            await trx.begin();
-            try {
-                await new sql.Request(trx)
-                    .input('id', sql.Int, targetId)
-                    .query('UPDATE Usuarios SET activo = 0 WHERE id_usuario = @id');
-
-                await new sql.Request(trx)
-                    .input('id', sql.Int, targetId)
-                    .query('DELETE FROM Usuario_Areas WHERE id_usuario = @id; DELETE FROM Usuario_Ubicaciones WHERE id_usuario = @id;');
-
-                await trx.commit();
-
-                return res.json({
-                    success: true,
-                    softDelete: true,
-                    message: `El usuario "${targetUser.nombre}" cuenta con asistencias registradas en el historial. Por motivos de auditoría, ha sido desactivado y se han revocado todos sus accesos.`
-                });
-            } catch (errTrx) {
-                await trx.rollback();
-                throw errTrx;
-            }
-        } else {
-            // Eliminación física permanente
-            await pool.request()
-                .input('id', sql.Int, targetId)
-                .query('DELETE FROM Usuarios WHERE id_usuario = @id');
+        if (hasHistory) {
+            // Baja lógica para proteger auditoría
+            await query('UPDATE Usuarios SET activo = 0 WHERE id_usuario = ?', [userId]);
+            await query('DELETE FROM Usuario_Areas WHERE id_usuario = ?', [userId]);
+            await query('DELETE FROM Usuario_Ubicaciones WHERE id_usuario = ?', [userId]);
 
             return res.json({
                 success: true,
-                softDelete: false,
-                message: `Usuario "${targetUser.nombre}" (@${targetUser.usuario}) eliminado permanentemente del sistema.`
+                message: `El usuario "${targetUser.nombre}" posee asistencias registradas en el histórico. Por integridad de datos fue desactivado y se revocaron sus permisos.`
             });
         }
+
+        // Eliminación física definitiva
+        await query('DELETE FROM Usuario_Areas WHERE id_usuario = ?', [userId]);
+        await query('DELETE FROM Usuario_Ubicaciones WHERE id_usuario = ?', [userId]);
+        await query('DELETE FROM Usuarios WHERE id_usuario = ?', [userId]);
+
+        return res.json({
+            success: true,
+            message: `El usuario "${targetUser.nombre}" fue eliminado exitosamente.`
+        });
     } catch (err) {
         console.error('Error al eliminar usuario:', err);
         return res.status(500).json({
             success: false,
-            message: 'Error interno al eliminar usuario: ' + err.message
+            message: 'Error al eliminar usuario: ' + err.message
         });
     }
 }

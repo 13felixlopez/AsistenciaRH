@@ -1,10 +1,9 @@
-const { getPool, sql } = require('../config/db');
+const { query } = require('../config/db');
 const { getUserAllowedAreas } = require('../middlewares/auth');
 const { getLocalDateStr } = require('../services/asistenciaService');
 
 async function showDashboard(req, res) {
     try {
-        const pool = await getPool();
         const user = req.user || req.session.user;
 
         // Obtener áreas a las que tiene acceso
@@ -21,56 +20,52 @@ async function showDashboard(req, res) {
         let graficoDias = [];
 
         if (areaIds.length > 0) {
-            const areaIdsList = areaIds.join(',');
+            const placeholders = areaIds.map(() => '?').join(',');
             const hoyLocal = getLocalDateStr();
 
             // Contar puestos en las áreas permitidas
-            const puestosRes = await pool.request().query(`
+            const puestosRes = await query(`
                 SELECT COUNT(*) AS total 
                 FROM Puestos 
-                WHERE id_area IN (${areaIdsList}) AND activo = 1
-            `);
-            totalPuestos = puestosRes.recordset[0].total;
+                WHERE id_area IN (${placeholders}) AND activo = 1
+            `, areaIds);
+            totalPuestos = puestosRes.recordset[0]?.total || 0;
 
             // Contar asistencias registradas hoy en las áreas permitidas (según fecha local de Nicaragua)
-            const asistenciasHoyRes = await pool.request()
-                .input('hoyLocal', sql.Date, hoyLocal)
-                .query(`
-                    SELECT ISNULL(SUM(a.cantidad_asistentes), 0) AS total_personas
-                    FROM Asistencias_Diarias a
-                    INNER JOIN Puestos p ON a.id_puesto = p.id_puesto
-                    WHERE p.id_area IN (${areaIdsList}) AND a.fecha = @hoyLocal
-                `);
-            totalAsistenciasHoy = asistenciasHoyRes.recordset[0].total_personas;
+            const asistenciasHoyRes = await query(`
+                SELECT COALESCE(SUM(a.cantidad_asistentes), 0) AS total_personas
+                FROM Asistencias_Diarias a
+                INNER JOIN Puestos p ON a.id_puesto = p.id_puesto
+                WHERE p.id_area IN (${placeholders}) AND a.fecha = ?
+            `, [...areaIds, hoyLocal]);
+            totalAsistenciasHoy = asistenciasHoyRes.recordset[0]?.total_personas || 0;
 
             // Resumen de Áreas con Faltantes de Personal Hoy (Plantilla vs Asistencia)
-            const rankingRes = await pool.request()
-                .input('hoyLocal', sql.Date, hoyLocal)
-                .query(`
-                    SELECT 
-                        ar.id_area,
-                        ar.nombre AS area_nombre,
-                        ar.codigo AS area_codigo,
-                        ISNULL(plantilla.total_contratada, 0) AS total_contratada,
-                        ISNULL(asistencia.total_asistentes, 0) AS total_asistentes
-                    FROM Areas ar
-                    LEFT JOIN (
-                        SELECT id_area, SUM(ISNULL(cantidad_contratada, 0)) AS total_contratada
-                        FROM Puestos
-                        WHERE activo = 1
-                        GROUP BY id_area
-                    ) plantilla ON ar.id_area = plantilla.id_area
-                    LEFT JOIN (
-                        SELECT p.id_area, SUM(ISNULL(ad.cantidad_asistentes, 0)) AS total_asistentes
-                        FROM Asistencias_Diarias ad
-                        INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
-                        WHERE ad.fecha = @hoyLocal
-                        GROUP BY p.id_area
-                    ) asistencia ON ar.id_area = asistencia.id_area
-                    WHERE ar.id_area IN (${areaIdsList})
-                `);
+            const rankingRes = await query(`
+                SELECT 
+                    ar.id_area,
+                    ar.nombre AS area_nombre,
+                    ar.codigo AS area_codigo,
+                    COALESCE(plantilla.total_contratada, 0) AS total_contratada,
+                    COALESCE(asistencia.total_asistentes, 0) AS total_asistentes
+                FROM Areas ar
+                LEFT JOIN (
+                    SELECT id_area, SUM(COALESCE(cantidad_contratada, 0)) AS total_contratada
+                    FROM Puestos
+                    WHERE activo = 1
+                    GROUP BY id_area
+                ) plantilla ON ar.id_area = plantilla.id_area
+                LEFT JOIN (
+                    SELECT p.id_area, SUM(COALESCE(ad.cantidad_asistentes, 0)) AS total_asistentes
+                    FROM Asistencias_Diarias ad
+                    INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
+                    WHERE ad.fecha = ?
+                    GROUP BY p.id_area
+                ) asistencia ON ar.id_area = asistencia.id_area
+                WHERE ar.id_area IN (${placeholders})
+            `, [hoyLocal, ...areaIds]);
 
-            rankingFaltantes = rankingRes.recordset.map(item => {
+            rankingFaltantes = (rankingRes.recordset || []).map(item => {
                 const contratada = item.total_contratada || 0;
                 const asistentes = item.total_asistentes || 0;
                 const diferencia = asistentes - contratada;
@@ -93,17 +88,17 @@ async function showDashboard(req, res) {
                 return a.porcentaje - b.porcentaje;
             });
 
-            // Últimos 8 registros de asistencia con datos de área, ubicación y puesto
-            const ultimosRes = await pool.request().query(`
-                SELECT TOP 8 
+            // Últimos 8 registros de asistencia
+            const ultimosRes = await query(`
+                SELECT 
                     ad.id_asistencia,
                     ad.fecha,
-                    ISNULL(ad.turno, 'UNICO') AS turno,
+                    COALESCE(ad.turno, 'UNICO') AS turno,
                     ad.cantidad_asistentes,
                     ad.observaciones,
                     ad.fecha_registro,
-                    FORMAT(ad.fecha_registro, 'dd/MM/yyyy hh:mm tt') AS fecha_registro_texto,
-                    FORMAT(ad.fecha_registro, 'hh:mm tt') AS hora_registro_texto,
+                    strftime('%d/%m/%Y %H:%M', ad.fecha_registro) AS fecha_registro_texto,
+                    strftime('%H:%M', ad.fecha_registro) AS hora_registro_texto,
                     p.nombre AS puesto_nombre,
                     ar.nombre AS area_nombre,
                     ub.nombre AS ubicacion_nombre,
@@ -112,26 +107,27 @@ async function showDashboard(req, res) {
                 INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
                 INNER JOIN Areas ar ON p.id_area = ar.id_area
                 LEFT JOIN Ubicaciones ub ON ad.id_ubicacion = ub.id_ubicacion
-                INNER JOIN Usuarios u ON ad.id_usuario_registro = u.id_usuario
-                WHERE ar.id_area IN (${areaIdsList})
+                LEFT JOIN Usuarios u ON ad.id_usuario_registro = u.id_usuario
+                WHERE ar.id_area IN (${placeholders})
                 ORDER BY ad.fecha DESC, ad.fecha_registro DESC
-            `);
+                LIMIT 8
+            `, areaIds);
             ultimosRegistros = ultimosRes.recordset;
 
-            // Datos para gráfico rápido de últimos 7 días
-            const chartRes = await pool.request()
-                .input('hoyLocal', sql.Date, hoyLocal)
-                .query(`
-                    SELECT 
-                        CONVERT(VARCHAR(10), ad.fecha, 120) AS fecha,
-                        SUM(ad.cantidad_asistentes) AS total_asistencias
-                    FROM Asistencias_Diarias ad
-                    INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
-                    WHERE p.id_area IN (${areaIdsList}) 
-                      AND ad.fecha >= DATEADD(day, -7, @hoyLocal)
-                    GROUP BY ad.fecha
-                    ORDER BY ad.fecha ASC
-                `);
+            // Datos para gráfico de los últimos 7 días
+            const sieteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const fechaMin = getLocalDateStr(sieteDiasAtras);
+            const chartRes = await query(`
+                SELECT 
+                    ad.fecha AS fecha,
+                    SUM(ad.cantidad_asistentes) AS total_asistencias
+                FROM Asistencias_Diarias ad
+                INNER JOIN Puestos p ON ad.id_puesto = p.id_puesto
+                WHERE p.id_area IN (${placeholders}) 
+                  AND ad.fecha >= ?
+                GROUP BY ad.fecha
+                ORDER BY ad.fecha ASC
+            `, [...areaIds, fechaMin]);
             graficoDias = chartRes.recordset;
         }
 

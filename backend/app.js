@@ -1,12 +1,12 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
-const morgan = require('morgan');
 
-const { getPool } = require('./config/db');
 const { isAuthenticated } = require('./middlewares/auth');
 
-// Rutas API
+// Controladores y Rutas
+const { initDatabase } = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const areaRoutes = require('./routes/areaRoutes');
 const puestoRoutes = require('./routes/puestoRoutes');
@@ -17,48 +17,105 @@ const usuarioRoutes = require('./routes/usuarioRoutes');
 const dashboardController = require('./controllers/dashboardController');
 
 const app = express();
-const PORT = process.env.PORT || 3031;
 
 // Configuración de CORS
-const corsOrigin = process.env.CORS_ORIGIN || '*';
 app.use(cors({
-    origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(s => s.trim()),
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
 // Middlewares generales
-app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Endpoint de comprobación de salud del servidor
-app.get('/api/health', (req, res) => {
+// Enrutador unificado para la API
+const apiRouter = express.Router();
+
+// Comprobación de salud
+apiRouter.get('/health', (req, res) => {
     res.json({
         status: 'UP',
         timestamp: new Date().toISOString(),
-        service: 'AsistenciaRH API'
+        service: 'AsistenciaRH API (Netlify + Turso)'
     });
 });
 
+// Endpoint blindado de inicialización / migración de base de datos en Turso
+apiRouter.get('/init-db', async (req, res) => {
+    try {
+        const { client } = require('./config/db');
+        let tablesExist = false;
+        try {
+            const check = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='Usuarios'");
+            tablesExist = Boolean(check.rows && check.rows.length > 0);
+        } catch (e) {
+            tablesExist = false;
+        }
+
+        // Si las tablas ya existen, se requiere autenticación estricta de ADMIN
+        if (tablesExist) {
+            const authHeader = req.headers.authorization;
+            let authorized = false;
+
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.split(' ')[1];
+                try {
+                    const jwt = require('jsonwebtoken');
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                    if (decoded && decoded.rol_codigo === 'ADMIN') {
+                        authorized = true;
+                    }
+                } catch (tokErr) {
+                    authorized = false;
+                }
+            }
+
+            if (!authorized) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Acceso denegado: La base de datos ya se encuentra en producción. Solo un Administrador autenticado puede ejecutar migraciones.'
+                });
+            }
+        }
+
+        const force = req.query.force === 'true';
+        const result = await initDatabase(force);
+        res.json({
+            success: true,
+            ...result
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: 'Error inicializando base de datos en Turso: ' + err.message
+        });
+    }
+});
+
 // Rutas Públicas de Autenticación
-app.use('/api/auth', authRoutes);
+apiRouter.use('/auth', authRoutes);
 
 // Rutas Protegidas del Sistema
-app.get('/api/dashboard', isAuthenticated, dashboardController.showDashboard);
-app.use('/api/areas', areaRoutes);
-app.use('/api/puestos', puestoRoutes);
-app.use('/api/ubicaciones', ubicacionRoutes);
-app.use('/api/asistencias', asistenciaRoutes);
-app.use('/api/reportes', reporteRoutes);
-app.use('/api/usuarios', usuarioRoutes);
+apiRouter.get('/dashboard', isAuthenticated, dashboardController.showDashboard);
+apiRouter.use('/areas', areaRoutes);
+apiRouter.use('/puestos', puestoRoutes);
+apiRouter.use('/ubicaciones', ubicacionRoutes);
+apiRouter.use('/asistencias', asistenciaRoutes);
+apiRouter.use('/reportes', reporteRoutes);
+apiRouter.use('/usuarios', usuarioRoutes);
 
-// Manejo de rutas no encontradas (404)
+// Montar en todas las rutas para compatibilidad total con Netlify Functions y desarrollo local
+app.use('/.netlify/functions/api', apiRouter);
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
+
+// Manejador 404 siempre en formato JSON
 app.use((req, res) => {
     res.status(404).json({
         success: false,
-        message: `Ruta no encontrada: ${req.method} ${req.originalUrl}`
+        message: `Ruta no encontrada en la API: ${req.method} ${req.originalUrl || req.url}`
     });
 });
 
@@ -72,34 +129,15 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Inicialización del Servidor y verificación de Base de Datos
-const { autocompletarAsistenciasPasadas } = require('./services/asistenciaService');
-const { runMigrationPlantilla } = require('./database/runMigrationPlantilla');
-
-async function startServer() {
-    try {
-        console.log('🔄 Conectando con Microsoft SQL Server...');
-        await getPool();
-        await runMigrationPlantilla().catch(e => console.error('Error migración plantilla:', e.message));
-        app.listen(PORT, () => {
-            console.log('======================================================');
-            console.log(`🚀 API AsistenciaRH corriendo en: http://localhost:${PORT}`);
-            console.log(`📡 Modo de entorno: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`🌐 CORS habilitado para: ${corsOrigin}`);
-            console.log('======================================================');
-
-            // Autocompletado de puestos nulos en fechas pasadas
-            autocompletarAsistenciasPasadas().catch(e => console.error('Error autocompletar al inicio:', e.message));
-
-            // Revisión periódica cada 30 minutos para cierre automático tras la medianoche
-            setInterval(() => {
-                autocompletarAsistenciasPasadas().catch(e => console.error('Error autocompletar periódico:', e.message));
-            }, 1000 * 60 * 30);
-        });
-    } catch (err) {
-        console.error('❌ No se pudo iniciar el servidor debido a fallos con SQL Server:', err.message);
-        process.exit(1);
-    }
+// Si se ejecuta directamente con Node (desarrollo local)
+if (require.main === module) {
+    const PORT = process.env.PORT || 3031;
+    app.listen(PORT, () => {
+        console.log('======================================================');
+        console.log(`🚀 API AsistenciaRH corriendo en: http://localhost:${PORT}`);
+        console.log(`📡 Base de Datos: Turso libSQL`);
+        console.log('======================================================');
+    });
 }
 
-startServer();
+module.exports = app;
