@@ -89,10 +89,9 @@ async function login(req, res) {
             rol_nombre: user.rol_nombre
         };
 
-        const jwtSecret = process.env.JWT_SECRET || 'asistencia_jwt_secret_key_2026';
         const token = jwt.sign(
             userPayload,
-            jwtSecret,
+            process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRES_IN || '12h' }
         );
 

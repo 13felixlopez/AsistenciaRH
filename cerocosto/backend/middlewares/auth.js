@@ -19,8 +19,7 @@ async function isAuthenticated(req, res, next) {
     }
 
     try {
-        const jwtSecret = process.env.JWT_SECRET || 'asistencia_jwt_secret_key_2026';
-        const decoded = jwt.verify(token, jwtSecret);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         // Verificación en tiempo real de usuario activo en base de datos (revocación inmediata)
         try {
