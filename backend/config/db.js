@@ -4,7 +4,7 @@ const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
 const url = process.env.TURSO_DATABASE_URL || 'libsql://asistenciarh-13felixlopez.aws-us-east-1.turso.io';
-const authToken = process.env.TURSO_AUTH_TOKEN || '';
+const authToken = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJleHAiOjE4MjU2MDc5MzYsImlhdCI6MTc5NDA3MTkzNiwiaWQiOiIwMWExYjcwMy1hMDAxLTdmODctYjhmNi02Y2EzMmRhNDFhZDYiLCJraWQiOiJTU2hud09oNEl5cmRDZEFSMV9XTmtoYkUxbVRlc09LenJNVXI4R0VqTmFVIiwicmlkIjoiNDVlODc3MDUtMzE1Yi00ZDljLWI2ZDYtZjZmZjgwNjViNjVmIn0.pyGSx_-_RseOfbrcLMLkTj_YCWfg5Im9z4soPxiqtO8dzafZKqzsQYQYRgkSP13q3_QWFfdNR-Iu0y9WY0b_BQ';
 
 const client = createClient({
     url,

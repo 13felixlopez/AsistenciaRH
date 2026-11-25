@@ -154,7 +154,7 @@ async function showDashboard(req, res) {
         console.error('Error al cargar dashboard:', err);
         return res.status(500).json({
             success: false,
-            message: 'Error al cargar el panel de control.',
+            message: 'Error al cargar el panel de control: ' + err.message,
             data: {
                 totalAreas: 0,
                 totalPuestos: 0,

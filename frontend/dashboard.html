@@ -509,7 +509,34 @@
                 }
             } catch (err) {
                 console.error('Error cargando dashboard:', err);
-                showToast('error', 'Error al cargar los datos del panel');
+                if (typeof showToast === 'function') {
+                    showToast('error', 'Error al cargar datos del panel: ' + (err.message || ''));
+                }
+                const tbodyRanking = document.getElementById('tbodyRankingFaltantes');
+                if (tbodyRanking) {
+                    tbodyRanking.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-danger">
+                                <i class="bi bi-exclamation-triangle-fill fs-4 d-block mb-2 text-danger"></i>
+                                <strong>Error al cargar el análisis de cobertura de personal:</strong><br>
+                                <span class="small text-muted">${err.message || 'Error de comunicación con el servidor'}</span>
+                                <div class="mt-3">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">
+                                        <i class="bi bi-arrow-clockwise me-1"></i> Reintentar
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
+                const tbody = document.getElementById('tbodyUltimosRegistros');
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-3 text-muted">No se pudieron cargar los registros recientes.</td></tr>`;
+                }
+                const areasListEl = document.getElementById('listAllowedAreas');
+                if (areasListEl) {
+                    areasListEl.innerHTML = `<div class="p-3 text-center text-muted">No se pudieron cargar las áreas asignadas.</div>`;
+                }
             }
         });
     </script>
