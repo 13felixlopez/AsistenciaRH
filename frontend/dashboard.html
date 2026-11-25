@@ -292,8 +292,9 @@
             initAppLayout('dashboard');
 
             const currentUser = Auth.getUser();
-            if (currentUser) {
-                document.getElementById('statUserRol').textContent = currentUser.rol_nombre || (currentUser.rol_codigo === 'ADMIN' ? 'Administrador' : 'Supervisor');
+            const statUserRolEl = document.getElementById('statUserRol');
+            if (currentUser && statUserRolEl) {
+                statUserRolEl.textContent = currentUser.rol_nombre || (currentUser.rol_codigo === 'ADMIN' ? 'Administrador' : 'Supervisor');
             }
 
             try {

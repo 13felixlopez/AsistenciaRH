@@ -1,4 +1,4 @@
-const CACHE_NAME = 'registro-asistencia-v3';
+const CACHE_NAME = 'registro-asistencia-v4';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -50,6 +50,9 @@ self.addEventListener('fetch', (event) => {
     // Solo peticiones GET
     if (request.method !== 'GET') return;
 
+    // No interceptar peticiones de la API ni Netlify Functions
+    if (request.url.includes('/api/') || request.url.includes('/.netlify/')) return;
+
     // Peticiones de navegación (Páginas HTML): Network first, fallback a caché
     if (request.mode === 'navigate') {
         event.respondWith(
@@ -83,20 +86,25 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Recursos estáticos: Cache First con actualización en segundo plano (Stale-While-Revalidate)
+    // Recursos estáticos: Cache First con actualización en segundo plano
     event.respondWith(
         caches.match(request).then((cached) => {
-            const networked = fetch(request)
-                .then((response) => {
-                    if (response && response.status === 200) {
-                        const copy = response.clone();
+            if (cached) {
+                fetch(request).then((networkResponse) => {
+                    if (networkResponse && networkResponse.status === 200) {
+                        const copy = networkResponse.clone();
                         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
                     }
-                    return response;
-                })
-                .catch(() => cached);
-
-            return cached || networked;
+                }).catch(() => {});
+                return cached;
+            }
+            return fetch(request).then((networkResponse) => {
+                if (networkResponse && networkResponse.status === 200) {
+                    const copy = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+                }
+                return networkResponse;
+            });
         })
     );
 });
